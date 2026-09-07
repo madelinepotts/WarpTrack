@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Native/PyTorch extension build artifacts
+build/
+*.pyd
+*.dll
+*.lib
+*.exp
+*.obj
+
+# Training outputs
+*.pt
+*.pth
+
+# IDE / OS
+.vscode/
+.vs/
+.DS_Store
+Thumbs.db
