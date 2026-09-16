@@ -27,7 +27,7 @@ class GeometryConfig:
     """
 
     detector_width_m: float = 0.4826  # approximate 19-inch rack width
-    detector_depth_m: float = 0.4826 * 16.0 / 9.0
+    detector_depth_m: float = 0.4826 * 17.0 / 10.0
     detector_height_m: float = 2.0 * RACK_UNIT_M
     top_bars: int = 9
     bottom_bars: int = 16
@@ -52,18 +52,21 @@ class GeometryConfig:
     def scintillator_base_m(self) -> float:
         """Nominal triangle base shared by both layers.
 
-        Top bars divide detector width; bottom bars divide detector depth.
-        Equal physical scintillator dimensions require these pitches to match.
+        Alternating up/down triangles tessellate by sharing their sloped
+        faces. Their center-to-center pitch is half the triangle base, not a
+        full base width. N triangles therefore span (N + 1) * base / 2.
+
+        The thin optical wrapping between real bars is intentionally ignored.
         """
-        top_pitch = self.detector_width_m / self.top_bars
-        bottom_pitch = self.detector_depth_m / self.bottom_bars
-        if abs(top_pitch - bottom_pitch) > 1.0e-9:
+        top_base = 2.0 * self.detector_width_m / (self.top_bars + 1)
+        bottom_base = 2.0 * self.detector_depth_m / (self.bottom_bars + 1)
+        if abs(top_base - bottom_base) > 1.0e-9:
             raise ValueError(
-                "Geometry does not permit equal-size scintillators: "
-                "detector_width_m/top_bars must equal "
-                "detector_depth_m/bottom_bars"
+                "Geometry does not permit equal-size tessellated scintillators: "
+                "2*detector_width_m/(top_bars+1) must equal "
+                "2*detector_depth_m/(bottom_bars+1)"
             )
-        return top_pitch
+        return top_base
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,7 +129,7 @@ def _make_hodoscope(
     # along y.  The layer center is half a layer below the hodoscope center.
     bottom_z = center_z - layer_height / 2.0
     for bar_id in range(config.bottom_bars):
-        center_y = -config.detector_depth_m / 2.0 + (bar_id + 0.5) * base
+        center_y = -config.detector_depth_m / 2.0 + base / 2.0 + bar_id * (base / 2.0)
         bars.append(
             ScintillatorBar(
                 channel_id=channel_id,
@@ -149,7 +152,7 @@ def _make_hodoscope(
     # axes run along y and the layer touches the bottom layer at z=center_z.
     top_z = center_z + layer_height / 2.0
     for bar_id in range(config.top_bars):
-        center_x = -config.detector_width_m / 2.0 + (bar_id + 0.5) * base
+        center_x = -config.detector_width_m / 2.0 + base / 2.0 + bar_id * (base / 2.0)
         bars.append(
             ScintillatorBar(
                 channel_id=channel_id,

@@ -490,18 +490,57 @@ python setup.py build_ext --inplace
 python -m unittest discover tests
 ```
 
-## Detector geometry model
 
-`data/detector_geometry.py` contains the first configurable rack/hodoscope geometry model used by WarpTrack.
+## Geometry-aware event display
 
-Current assumptions:
+WarpTrack includes a 3D validation display for the current synthetic cosmic-ray geometry.
 
-- A rack contains at least three hodoscopes, with arbitrary/nonuniform rack-U positions so servers or other hardware can sit between them.
-- Each hodoscope occupies an approximately 2U-high envelope.
-- Each hodoscope contains 25 triangular-prism scintillators total: 9 in the top layer and 16 in the bottom layer.
-- The two layers touch and their scintillator axes are perpendicular.
-- Scintillators use the same nominal triangular cross-section in both layers.
-- The outer elements of each layer are identified as half-end elements so the packed triangular scintillators can form the rectangular detector envelope. Exact end-piece intersection geometry will be added with the particle-intersection step.
-- Default physical dimensions and rack-U positions are placeholders. Replace them with measured values when available.
+Install Matplotlib if it is not already available:
 
-The geometry is intentionally independent of synthetic event generation so the same detector description can later be used with improved Monte Carlo, Geant4-derived events, and real detector data.
+```powershell
+python -m pip install matplotlib
+```
+
+Generate one accepted cosmic-ray event and inspect it:
+
+```powershell
+python view_event.py
+```
+
+The terminal prints the sampled zenith/azimuth and a chronological hit table with
+hodoscope, layer, bar, channel, hit midpoint, path length, and time of flight.
+A Matplotlib 3D window then shows every triangular-prism scintillator, the
+particle trajectory, and the scintillators reported as hits.
+
+The current rack-U positions and exact detector dimensions are still
+configurable placeholders. The event display is intended to make geometry and
+intersection mistakes visually obvious before the synthetic events are used for
+ML training.
+
+
+### Interactive event display and saved snapshot
+
+`python view_event.py` now creates one event, saves that exact event to
+`warptrack_event.png`, and then opens the same Matplotlib 3D figure interactively.
+Drag the 3D view to rotate it and use the Matplotlib toolbar for zoom/pan.
+
+Hit scintillator prisms are highlighted, while the hit midpoint is shown in a
+separate red marker so the geometric crossing point is easy to distinguish.
+
+The scintillator bars are intended to tessellate without physical gaps. If gaps
+are visible in the display, that is a geometry/visualization issue rather than an
+intentional detector feature and should be corrected before using the geometry
+for synthetic training data.
+
+
+### Tessellated triangular scintillators
+
+Neighboring alternating triangular prisms now use half of the triangle-base
+width as their center-to-center pitch. This makes adjacent bars share their
+sloped faces instead of leaving empty wedges. The thin optical wrapping between
+real bars is intentionally ignored for now.
+
+The same triangle cross-section is used in both perpendicular layers. The
+default detector depth was adjusted consistently for the 9-bar and 16-bar
+layers; physical dimensions remain configurable placeholders until measured
+dimensions are supplied.
