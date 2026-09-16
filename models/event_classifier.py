@@ -68,9 +68,7 @@ class EventClassifier(nn.Module):
 
         hit_count = mask.sum(dim=1).float()
 
-        energy_sum = (
-            hits[..., 3] * mask.float()
-        ).sum(dim=1)
+        energy_sum = (hits[..., 3] * mask.float()).sum(dim=1)
 
         geometry = torch.stack(
             [
@@ -86,11 +84,7 @@ class EventClassifier(nn.Module):
 
         encoded = encoded * mask.unsqueeze(-1)
 
-        denominator = (
-            mask.sum(dim=1, keepdim=True)
-            .clamp_min(1)
-            .float()
-        )
+        denominator = mask.sum(dim=1, keepdim=True).clamp_min(1).float()
 
         pooled = encoded.sum(dim=1) / denominator
 

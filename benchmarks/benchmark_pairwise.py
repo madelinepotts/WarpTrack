@@ -27,11 +27,7 @@ def main():
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA GPU required")
 
-    print(
-        f"{'Hits':>8} "
-        f"{'Custom CUDA (ms)':>18} "
-        f"{'PyTorch (ms)':>14}"
-    )
+    print(f"{'Hits':>8} " f"{'Custom CUDA (ms)':>18} " f"{'PyTorch (ms)':>14}")
 
     for num_hits in [16, 32, 64, 128, 256, 512]:
         positions = torch.randn(
@@ -42,27 +38,16 @@ def main():
             dtype=torch.float32,
         )
 
-        custom_ms = benchmark(
-            lambda: warptrack_cuda.pairwise_distance(
-                positions
-            )
-        )
+        custom_ms = benchmark(lambda: warptrack_cuda.pairwise_distance(positions))
 
         pytorch_ms = benchmark(
             lambda: torch.sum(
-                (
-                    positions[:, :, None, :]
-                    - positions[:, None, :, :]
-                ) ** 2,
+                (positions[:, :, None, :] - positions[:, None, :, :]) ** 2,
                 dim=-1,
             )
         )
 
-        print(
-            f"{num_hits:8d} "
-            f"{custom_ms:18.4f} "
-            f"{pytorch_ms:14.4f}"
-        )
+        print(f"{num_hits:8d} " f"{custom_ms:18.4f} " f"{pytorch_ms:14.4f}")
 
 
 if __name__ == "__main__":

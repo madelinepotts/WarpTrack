@@ -57,8 +57,12 @@ def _set_equal_axes(ax, rack: RackGeometry, event: CosmicRayEvent) -> None:
     cfg = rack.config
     xs = [-cfg.detector_width_m / 2.0, cfg.detector_width_m / 2.0]
     ys = [-cfg.detector_depth_m / 2.0, cfg.detector_depth_m / 2.0]
-    detector_bottom = min(h.center_z_m for h in rack.hodoscopes) - cfg.detector_height_m / 2.0
-    detector_top = max(h.center_z_m for h in rack.hodoscopes) + cfg.detector_height_m / 2.0
+    detector_bottom = (
+        min(h.center_z_m for h in rack.hodoscopes) - cfg.detector_height_m / 2.0
+    )
+    detector_top = (
+        max(h.center_z_m for h in rack.hodoscopes) + cfg.detector_height_m / 2.0
+    )
     rack_span = max(detector_top - detector_bottom, cfg.detector_height_m)
     upper_display_margin = max(0.35, 0.35 * rack_span)
     lower_display_margin = max(0.15, 0.15 * rack_span)
@@ -70,11 +74,15 @@ def _set_equal_axes(ax, rack: RackGeometry, event: CosmicRayEvent) -> None:
     xmid = sum(xs) / 2.0
     ymid = sum(ys) / 2.0
     zmid = (min(zs) + max(zs)) / 2.0
-    radius = max(
-        xs[1] - xs[0],
-        ys[1] - ys[0],
-        max(zs) - min(zs),
-    ) / 2.0 * 1.08
+    radius = (
+        max(
+            xs[1] - xs[0],
+            ys[1] - ys[0],
+            max(zs) - min(zs),
+        )
+        / 2.0
+        * 1.08
+    )
 
     ax.set_xlim(xmid - radius, xmid + radius)
     ax.set_ylim(ymid - radius, ymid + radius)
@@ -141,12 +149,10 @@ def display_event(
     # hodoscope and below the lowest one.  Do not rely on the generated origin
     # being visually far enough above the rack.
     top_z = max(
-        h.center_z_m + rack.config.detector_height_m / 2.0
-        for h in rack.hodoscopes
+        h.center_z_m + rack.config.detector_height_m / 2.0 for h in rack.hodoscopes
     )
     bottom_z = min(
-        h.center_z_m - rack.config.detector_height_m / 2.0
-        for h in rack.hodoscopes
+        h.center_z_m - rack.config.detector_height_m / 2.0 for h in rack.hodoscopes
     )
 
     rack_span = max(top_z - bottom_z, rack.config.detector_height_m)

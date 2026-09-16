@@ -21,14 +21,9 @@ class TestPairwiseDistance(unittest.TestCase):
             dtype=torch.float32,
         )
 
-        actual = warptrack_cuda.pairwise_distance(
-            positions
-        )
+        actual = warptrack_cuda.pairwise_distance(positions)
 
-        delta = (
-            positions[:, :, None, :]
-            - positions[:, None, :, :]
-        )
+        delta = positions[:, :, None, :] - positions[:, None, :, :]
 
         expected = torch.sum(
             delta * delta,

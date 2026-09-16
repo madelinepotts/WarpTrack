@@ -7,16 +7,12 @@ from models.event_classifier import EventClassifier
 
 
 def accuracy(logits, labels):
-    return (
-        logits.argmax(dim=1) == labels
-    ).float().mean().item()
+    return (logits.argmax(dim=1) == labels).float().mean().item()
 
 
 def main():
     if not torch.cuda.is_available():
-        raise RuntimeError(
-            "WarpTrack starter currently requires a CUDA-capable GPU."
-        )
+        raise RuntimeError("WarpTrack starter currently requires a CUDA-capable GPU.")
 
     device = torch.device("cuda")
 
@@ -80,9 +76,7 @@ def main():
             batch_size = labels.size(0)
 
             total_loss += loss.item() * batch_size
-            total_correct += (
-                logits.argmax(dim=1) == labels
-            ).sum().item()
+            total_correct += (logits.argmax(dim=1) == labels).sum().item()
             total_events += batch_size
 
         train_loss = total_loss / total_events
@@ -101,9 +95,7 @@ def main():
 
                 logits = model(hits, mask)
 
-                total_correct += (
-                    logits.argmax(dim=1) == labels
-                ).sum().item()
+                total_correct += (logits.argmax(dim=1) == labels).sum().item()
 
                 total_events += labels.size(0)
 

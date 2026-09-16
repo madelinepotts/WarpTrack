@@ -35,7 +35,9 @@ class CosmicRayConfig:
         if not 0.0 < self.max_zenith_deg < 90.0:
             raise ValueError("max_zenith_deg must be between 0 and 90 degrees")
         if self.generation_margin_m < 0.0 or self.generation_height_m <= 0.0:
-            raise ValueError("Generation margin must be nonnegative and height positive")
+            raise ValueError(
+                "Generation margin must be nonnegative and height positive"
+            )
         if self.min_hodoscopes_hit < 1:
             raise ValueError("min_hodoscopes_hit must be at least 1")
         if self.max_attempts < 1:
@@ -125,7 +127,9 @@ class CosmicRayGenerator:
             hits = intersect_track_rack(track, self.rack, forward_only=True)
             hodoscopes_hit = {hit.hodoscope_id for hit in hits}
             if len(hodoscopes_hit) >= self.config.min_hodoscopes_hit:
-                return CosmicRayEvent(track=track, theta_rad=theta, phi_rad=phi, hits=hits)
+                return CosmicRayEvent(
+                    track=track, theta_rad=theta, phi_rad=phi, hits=hits
+                )
 
         raise RuntimeError(
             "Could not generate a cosmic-ray event satisfying the hodoscope "

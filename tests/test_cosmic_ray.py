@@ -20,14 +20,18 @@ class CosmicRayGeneratorTests(unittest.TestCase):
             self.assertLess(phi, 2.0 * math.pi)
 
     def test_sample_track_has_unit_downward_direction(self):
-        gen = CosmicRayGenerator(self.rack, CosmicRayConfig(min_hodoscopes_hit=1), seed=2)
+        gen = CosmicRayGenerator(
+            self.rack, CosmicRayConfig(min_hodoscopes_hit=1), seed=2
+        )
         track, _, _ = gen.sample_track()
         norm = math.sqrt(sum(x * x for x in track.direction))
         self.assertAlmostEqual(norm, 1.0)
         self.assertLess(track.dz, 0.0)
 
     def test_phi_covers_all_quadrants(self):
-        gen = CosmicRayGenerator(self.rack, CosmicRayConfig(min_hodoscopes_hit=1), seed=9)
+        gen = CosmicRayGenerator(
+            self.rack, CosmicRayConfig(min_hodoscopes_hit=1), seed=9
+        )
         quadrants = set()
         for _ in range(500):
             _, phi = gen.sample_angles()
@@ -37,7 +41,9 @@ class CosmicRayGeneratorTests(unittest.TestCase):
     def test_cosine_distribution_is_not_isotropic(self):
         # For n=2 on a horizontal crossing plane, p(mu)~mu^3.  With the
         # default 75-degree truncation the mean mu should be comfortably high.
-        gen = CosmicRayGenerator(self.rack, CosmicRayConfig(min_hodoscopes_hit=1), seed=44)
+        gen = CosmicRayGenerator(
+            self.rack, CosmicRayConfig(min_hodoscopes_hit=1), seed=44
+        )
         mus = [math.cos(gen.sample_angles()[0]) for _ in range(10000)]
         self.assertGreater(sum(mus) / len(mus), 0.75)
 

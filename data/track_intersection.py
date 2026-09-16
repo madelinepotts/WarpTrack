@@ -16,7 +16,6 @@ from typing import Iterable, Tuple
 from .detector_geometry import RackGeometry, ScintillatorBar
 from .particle_track import ParticleTrack, Vector3
 
-
 _EPS = 1.0e-12
 SPEED_OF_LIGHT_M_PER_S = 299_792_458.0
 

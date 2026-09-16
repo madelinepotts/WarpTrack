@@ -21,7 +21,12 @@ def _load_msvc_environment():
         return
 
     program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
-    vswhere = Path(program_files_x86) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+    vswhere = (
+        Path(program_files_x86)
+        / "Microsoft Visual Studio"
+        / "Installer"
+        / "vswhere.exe"
+    )
 
     vcvars64 = None
     if vswhere.exists():
@@ -40,7 +45,9 @@ def _load_msvc_environment():
                 text=True,
             ).strip()
             if install_path:
-                candidate = Path(install_path) / "VC" / "Auxiliary" / "Build" / "vcvars64.bat"
+                candidate = (
+                    Path(install_path) / "VC" / "Auxiliary" / "Build" / "vcvars64.bat"
+                )
                 if candidate.exists():
                     vcvars64 = candidate
         except (OSError, subprocess.CalledProcessError):

@@ -25,9 +25,7 @@ class TestPairwiseDistance(unittest.TestCase):
 
         torch.cuda.synchronize()
 
-        self.assertTrue(
-            torch.allclose(actual, expected, rtol=1e-5, atol=1e-5)
-        )
+        self.assertTrue(torch.allclose(actual, expected, rtol=1e-5, atol=1e-5))
 
 
 if __name__ == "__main__":

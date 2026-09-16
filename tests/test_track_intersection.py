@@ -41,9 +41,7 @@ class TrackBarIntersectionTests(unittest.TestCase):
 
     def test_y_oriented_prism_uses_x_as_transverse_coordinate(self):
         bar = self.make_bar(orientation="y")
-        hit = intersect_track_bar(
-            ParticleTrack((0.0, 0.3, 1.0), (0.0, 0.0, -1.0)), bar
-        )
+        hit = intersect_track_bar(ParticleTrack((0.0, 0.3, 1.0), (0.0, 0.0, -1.0)), bar)
         self.assertIsNotNone(hit)
 
     def test_angled_track_has_longer_path(self):

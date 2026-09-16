@@ -4,7 +4,6 @@ from dataclasses import dataclass
 import math
 from typing import Tuple
 
-
 Vector3 = Tuple[float, float, float]
 
 

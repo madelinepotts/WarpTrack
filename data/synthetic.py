@@ -4,7 +4,6 @@ import random
 import torch
 from torch.utils.data import Dataset
 
-
 MUON = 0
 HADRONIC_SHOWER = 1
 
@@ -85,49 +84,29 @@ def generate_hadronic_event(num_hits, generator):
     xyz = (
         origin[None, :]
         + depth[:, None] * direction[None, :]
-        + (
-            transverse_scale
-            * torch.randn(num_hits, generator=generator)
-        )[:, None] * u[None, :]
-        + (
-            transverse_scale
-            * torch.randn(num_hits, generator=generator)
-        )[:, None] * v[None, :]
+        + (transverse_scale * torch.randn(num_hits, generator=generator))[:, None]
+        * u[None, :]
+        + (transverse_scale * torch.randn(num_hits, generator=generator))[:, None]
+        * v[None, :]
     )
 
     # Add one or two crude secondary branches.
-    branch_count = 1 + int(
-        torch.randint(0, 2, (1,), generator=generator).item()
-    )
+    branch_count = 1 + int(torch.randint(0, 2, (1,), generator=generator).item())
 
     for _ in range(branch_count):
         branch_size = max(2, num_hits // 6)
 
-        indices = torch.randperm(
-            num_hits,
-            generator=generator
-        )[:branch_size]
+        indices = torch.randperm(num_hits, generator=generator)[:branch_size]
 
-        branch_direction = (
-            direction
-            + 0.55 * _random_unit_vector(generator)
-        )
-        branch_direction = branch_direction / torch.linalg.norm(
-            branch_direction
-        )
+        branch_direction = direction + 0.55 * _random_unit_vector(generator)
+        branch_direction = branch_direction / torch.linalg.norm(branch_direction)
 
-        branch_step = (
-            torch.rand(branch_size, generator=generator) * 1.5
-        )
+        branch_step = torch.rand(branch_size, generator=generator) * 1.5
 
-        xyz[indices] += (
-            branch_step[:, None] * branch_direction[None, :]
-        )
+        xyz[indices] += branch_step[:, None] * branch_direction[None, :]
 
     # Broader, asymmetric energy deposition.
-    energy = torch.exp(
-        0.55 * torch.randn(num_hits, generator=generator)
-    )
+    energy = torch.exp(0.55 * torch.randn(num_hits, generator=generator))
     energy = torch.clamp(energy, min=0.10, max=8.0)
 
     hits = torch.cat([xyz, energy[:, None]], dim=1)
@@ -173,9 +152,7 @@ class SyntheticCosmicDataset(Dataset):
         label = rng.randint(0, 1)
 
         generator = torch.Generator()
-        generator.manual_seed(
-            self.seed * 100000 + index
-        )
+        generator.manual_seed(self.seed * 100000 + index)
 
         if label == MUON:
             upper = max(self.min_hits, self.max_hits // 2)

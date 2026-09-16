@@ -27,11 +27,7 @@ def main():
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA GPU required")
 
-    print(
-        f"{'Hits':>8} "
-        f"{'Custom CUDA (ms)':>18} "
-        f"{'PyTorch (ms)':>14}"
-    )
+    print(f"{'Hits':>8} " f"{'Custom CUDA (ms)':>18} " f"{'PyTorch (ms)':>14}")
 
     for num_hits in [64, 128, 256, 512, 1024]:
         positions = torch.randn(
@@ -50,11 +46,7 @@ def main():
             lambda: torch.cdist(positions, positions) ** 2
         )
 
-        print(
-            f"{num_hits:8d} "
-            f"{custom_ms:18.4f} "
-            f"{pytorch_ms:14.4f}"
-        )
+        print(f"{num_hits:8d} " f"{custom_ms:18.4f} " f"{pytorch_ms:14.4f}")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import unittest
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -37,9 +38,11 @@ class EventDisplayTests(unittest.TestCase):
         self.assertEqual(
             _prism_faces(left)[0],
             [
-                (left.center_x_m - left.length_m / 2.0,
-                 left.center_y_m + u,
-                 left.center_z_m + z)
+                (
+                    left.center_x_m - left.length_m / 2.0,
+                    left.center_y_m + u,
+                    left.center_z_m + z,
+                )
                 for u, z in left.cross_section_vertices_m()
             ],
         )
@@ -56,7 +59,6 @@ class EventDisplayTests(unittest.TestCase):
         self.assertEqual(ax.name, "3d")
         plt.close(fig)
 
-
     def test_track_line_extends_beyond_rack(self):
         generator = CosmicRayGenerator(
             self.rack,
@@ -66,7 +68,9 @@ class EventDisplayTests(unittest.TestCase):
         event = generator.generate_event()
         fig, ax = display_event(self.rack, event, show=False)
 
-        track_line = next(line for line in ax.lines if line.get_label() == "particle track")
+        track_line = next(
+            line for line in ax.lines if line.get_label() == "particle track"
+        )
         _, _, zs = track_line.get_data_3d()
 
         top_z = max(
@@ -81,6 +85,7 @@ class EventDisplayTests(unittest.TestCase):
         self.assertGreater(max(zs), top_z)
         self.assertLess(min(zs), bottom_z)
         plt.close(fig)
+
 
 if __name__ == "__main__":
     unittest.main()

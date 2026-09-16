@@ -30,6 +30,7 @@ def main() -> None:
     # Matplotlib's 3D window is interactive: drag to rotate and use the toolbar
     # to zoom/pan. Reuse the existing figure rather than generating a new event.
     import matplotlib.pyplot as plt
+
     plt.show()
 
 
