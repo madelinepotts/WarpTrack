@@ -58,6 +58,29 @@ class TrackBarIntersectionTests(unittest.TestCase):
         self.assertIsNotNone(angled)
         self.assertGreater(angled.path_length_m, vertical.path_length_m)
 
+    def test_half_triangle_uses_half_sensitive_cross_section(self):
+        full = self.make_bar(bar_id=1)
+        half = ScintillatorBar(
+            channel_id=0,
+            hodoscope_id=0,
+            layer_id=0,
+            bar_id=0,
+            center_x_m=0.0,
+            center_y_m=0.0,
+            center_z_m=0.0,
+            length_m=1.0,
+            triangle_base_m=0.2,
+            triangle_height_m=0.1,
+            orientation="x",
+            shape="half_triangle",
+            edge="left",
+        )
+        # u=+0.05 lies outside the bottom-left half, while it is inside a
+        # normal full triangular cross-section.
+        track = ParticleTrack((0.0, 0.05, 1.0), (0.0, 0.0, -1.0))
+        self.assertIsNotNone(intersect_track_bar(track, full))
+        self.assertIsNone(intersect_track_bar(track, half))
+
     def test_odd_bar_triangle_is_inverted_but_center_still_hits(self):
         hit = intersect_track_bar(
             ParticleTrack((0.0, 0.0, 1.0), (0.0, 0.0, -1.0)),

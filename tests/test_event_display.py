@@ -22,6 +22,28 @@ class EventDisplayTests(unittest.TestCase):
         for side in faces[2:]:
             self.assertEqual(len(side), 4)
 
+    def test_plotter_uses_half_triangle_edge_geometry(self):
+        h = self.rack.hodoscopes[0]
+        left = h.bottom_layer[0]
+        interior = h.bottom_layer[1]
+        right = h.top_layer[-1]
+
+        self.assertTrue(left.is_half_end)
+        self.assertTrue(right.is_half_end)
+        self.assertNotEqual(
+            set(left.cross_section_vertices_m()),
+            set(interior.cross_section_vertices_m()),
+        )
+        self.assertEqual(
+            _prism_faces(left)[0],
+            [
+                (left.center_x_m - left.length_m / 2.0,
+                 left.center_y_m + u,
+                 left.center_z_m + z)
+                for u, z in left.cross_section_vertices_m()
+            ],
+        )
+
     def test_display_builds_for_generated_event(self):
         generator = CosmicRayGenerator(
             self.rack,

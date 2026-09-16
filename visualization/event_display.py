@@ -13,14 +13,8 @@ from data.detector_geometry import RackGeometry, ScintillatorBar
 
 
 def _triangle_vertices(bar: ScintillatorBar):
-    """Return the three triangle vertices in the bar's transverse/z plane."""
-    hb = bar.triangle_base_m / 2.0
-    hh = bar.triangle_height_m / 2.0
-
-    # This matches the same alternating orientation used by track_intersection.
-    if bar.bar_id % 2 == 0:
-        return [(-hb, -hh), (hb, -hh), (0.0, hh)]
-    return [(-hb, hh), (hb, hh), (0.0, -hh)]
+    """Return the exact sensitive cross-section from detector_geometry."""
+    return list(bar.cross_section_vertices_m())
 
 
 def _prism_faces(bar: ScintillatorBar):

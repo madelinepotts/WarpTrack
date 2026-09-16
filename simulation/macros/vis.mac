@@ -1,0 +1,10 @@
+/run/initialize
+/vis/open OGL
+/vis/drawVolume
+/vis/viewer/set/viewpointVector 1 1 0.6
+/vis/viewer/set/upVector 0 0 1
+/vis/viewer/zoom 1.2
+/vis/scene/add/trajectories smooth
+/tracking/storeTrajectory 1
+/vis/scene/endOfEventAction accumulate 10
+/run/beamOn 1

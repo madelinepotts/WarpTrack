@@ -533,14 +533,24 @@ intentional detector feature and should be corrected before using the geometry
 for synthetic training data.
 
 
-### Tessellated triangular scintillators
+### Canonical hodoscope geometry
 
-Neighboring alternating triangular prisms now use half of the triangle-base
-width as their center-to-center pitch. This makes adjacent bars share their
-sloped faces instead of leaving empty wedges. The thin optical wrapping between
-real bars is intentionally ignored for now.
+`data/detector_geometry.py` is the single Python source of truth for detector
+geometry. The top-level `detector_geometry.py` is only a compatibility re-export.
+The event display, track-intersection code, cosmic-ray generator, and tests all
+consume the canonical geometry rather than defining their own bar shapes.
 
-The same triangle cross-section is used in both perpendicular layers. The
-default detector depth was adjusted consistently for the 9-bar and 16-bar
-layers; physical dimensions remain configurable placeholders until measured
-dimensions are supplied.
+Each hodoscope contains exactly **25 sensitive scintillators**. The bottom layer
+contains 16 total: a left half-triangle (local channel 0), 14 full triangular
+prisms (1-14), and a right half-triangle (15). The top layer contains 9 total: a
+left half-triangle (local channel 16), 7 full triangular prisms (17-23), and a
+right half-triangle (24). The edge halves are included in the 25-channel count;
+they are not additional volumes. Global channel IDs are
+`hodoscope_id * 25 + local_channel`.
+
+The Python cross-section vertices, plotting, and geometric track intersection
+match the shapes and dimensions used by `simulation/src/DetectorConstruction.cc`.
+Neighboring pieces retain the half-base center pitch used by the Geant4 model.
+The thin optical wrapping between real scintillators is intentionally ignored.
+Rack-U positions and absolute detector dimensions remain placeholders until
+measured values are supplied.

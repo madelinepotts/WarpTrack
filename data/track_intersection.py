@@ -4,10 +4,9 @@ This module performs exact line clipping against triangular-prism sensitive
 volumes.  The prism axis is the long direction of a scintillator bar; the
 cross-section is an isosceles triangle in the segmentation/z plane.
 
-The current detector geometry does not yet encode the measured end-piece
-profile, so the first and last channels use the same triangular-prism
-intersection as interior channels.  Keeping that limitation here makes it
-explicit and easy to replace when measured end geometry is available.
+The cross-section polygons come directly from detector_geometry, including the
+half-triangle edge scintillators, so intersection and plotting use the same
+sensitive volumes.
 """
 
 from dataclasses import dataclass
@@ -63,31 +62,33 @@ def _clip_halfspace(
 
 
 def _triangle_halfspaces(bar: ScintillatorBar):
-    """Return local (u,z) halfspaces for an isosceles triangular cross-section.
+    """Return inward halfspaces for the bar's canonical cross-section.
 
-    ``u`` is transverse to the long prism axis and ``z`` is measured from the
-    bar center. Neighboring channels alternate triangle orientation in this
-    first-pass packing model.
+    Each tuple is ``c + au*u + az*z >= 0``.  The polygon vertices come from
+    ``ScintillatorBar.cross_section_vertices_m()``, which also encodes the
+    half-triangle edge pieces used by Geant4 and the event display.
     """
-    half_base = bar.triangle_base_m / 2.0
-    half_height = bar.triangle_height_m / 2.0
-    slope = 2.0 * half_height / half_base
+    vertices = bar.cross_section_vertices_m()
+    centroid_u = sum(p[0] for p in vertices) / len(vertices)
+    centroid_z = sum(p[1] for p in vertices) / len(vertices)
+    halfspaces = []
 
-    # Each tuple is c + au*u + az*z >= 0.
-    if bar.bar_id % 2 == 0:
-        # Up-pointing: (-hb,-hh), (+hb,-hh), (0,+hh)
-        return (
-            (half_height, 0.0, 1.0),       # z >= -hh
-            (half_height, -slope, -1.0),   # z <= hh - slope*u
-            (half_height, slope, -1.0),    # z <= hh + slope*u
-        )
+    for (u1, z1), (u2, z2) in zip(vertices, vertices[1:] + vertices[:1]):
+        du = u2 - u1
+        dz = z2 - z1
 
-    # Down-pointing: (-hb,+hh), (+hb,+hh), (0,-hh)
-    return (
-        (half_height, 0.0, -1.0),          # z <= +hh
-        (half_height, -slope, 1.0),        # z >= -hh + slope*u
-        (half_height, slope, 1.0),         # z >= -hh - slope*u
-    )
+        # cross(edge, point - p1) = c + au*u + az*z
+        c = dz * u1 - du * z1
+        au = -dz
+        az = du
+
+        at_centroid = c + au * centroid_u + az * centroid_z
+        if at_centroid < 0.0:
+            c, au, az = -c, -au, -az
+
+        halfspaces.append((c, au, az))
+
+    return tuple(halfspaces)
 
 
 def intersect_track_bar(
