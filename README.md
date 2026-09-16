@@ -554,3 +554,8 @@ Neighboring pieces retain the half-base center pitch used by the Geant4 model.
 The thin optical wrapping between real scintillators is intentionally ignored.
 Rack-U positions and absolute detector dimensions remain placeholders until
 measured values are supplied.
+
+
+## Shared detector geometry
+
+`geometry/detector_geometry.json` is now the single source of truth for detector dimensions, hodoscope instances, channel segmentation, and scintillator polygons. Python loads it directly. CMake regenerates a C++ header from the same JSON before building Geant4. Geant4 constructs the triangular prisms as tessellated solids in global-aligned coordinates, eliminating separate layer rotation conventions. To expand the rack or detector, edit the JSON and rebuild.

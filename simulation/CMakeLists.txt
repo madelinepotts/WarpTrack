@@ -2,11 +2,21 @@ cmake_minimum_required(VERSION 3.16)
 project(WarpTrackGeant4 LANGUAGES CXX)
 find_package(Geant4 REQUIRED ui_all vis_all)
 find_package(ROOT REQUIRED COMPONENTS Core RIO Tree)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 include(${Geant4_USE_FILE})
-add_executable(warptrack_sim
- src/main.cc src/DetectorConstruction.cc src/ScintillatorSD.cc
- src/PrimaryGeneratorAction.cc src/RunAction.cc)
-target_include_directories(warptrack_sim PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+set(GEOMETRY_JSON ${CMAKE_CURRENT_SOURCE_DIR}/../geometry/detector_geometry.json)
+set(GEOMETRY_HEADER ${CMAKE_CURRENT_BINARY_DIR}/generated/DetectorGeometryGenerated.hh)
+add_custom_command(OUTPUT ${GEOMETRY_HEADER}
+ COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../geometry/generate_cpp_geometry.py ${GEOMETRY_JSON} ${GEOMETRY_HEADER}
+ DEPENDS ${GEOMETRY_JSON} ${CMAKE_CURRENT_SOURCE_DIR}/../geometry/generate_cpp_geometry.py
+ COMMENT "Generating C++ detector geometry from shared JSON")
+add_custom_target(generate_geometry DEPENDS ${GEOMETRY_HEADER})
+add_executable(warptrack_sim src/main.cc src/DetectorConstruction.cc src/ScintillatorSD.cc src/PrimaryGeneratorAction.cc src/RunAction.cc ${GEOMETRY_HEADER})
+add_dependencies(warptrack_sim generate_geometry)
+target_include_directories(warptrack_sim PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(warptrack_sim PRIVATE ${Geant4_LIBRARIES} ROOT::Core ROOT::RIO ROOT::Tree)
 target_compile_features(warptrack_sim PRIVATE cxx_std_17)
+if(MSVC)
+ target_compile_options(warptrack_sim PRIVATE /Zc:__cplusplus)
+endif()
 file(COPY macros DESTINATION ${CMAKE_CURRENT_BINARY_DIR})

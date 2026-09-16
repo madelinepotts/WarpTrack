@@ -4,7 +4,7 @@
 class G4LogicalVolume; class RunAction;
 class DetectorConstruction : public G4VUserDetectorConstruction {
 public:
- explicit DetectorConstruction(RunAction*);
+ explicit DetectorConstruction(RunAction* r);
  G4VPhysicalVolume* Construct() override;
  void ConstructSDandField() override;
 private:

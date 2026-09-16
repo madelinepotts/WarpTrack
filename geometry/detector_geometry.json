@@ -1,0 +1,576 @@
+{
+  "schema_version": 1,
+  "units": "mm",
+  "rack": {
+    "rack_unit_height": 44.45,
+    "width": 482.6,
+    "depth": 904.875
+  },
+  "hodoscope": {
+    "height": 88.9,
+    "channels_per_hodoscope": 25
+  },
+  "instances": [
+    {
+      "id": 0,
+      "rack_u": 4.0
+    },
+    {
+      "id": 1,
+      "rack_u": 14.0
+    },
+    {
+      "id": 2,
+      "rack_u": 27.0
+    }
+  ],
+  "layers": [
+    {
+      "id": 0,
+      "name": "bottom",
+      "orientation": "x",
+      "count": 16,
+      "channel_offset": 0,
+      "span": "depth",
+      "extrusion": "width",
+      "pieces": [
+        {
+          "bar_id": 0,
+          "shape": "half_triangle",
+          "edge": "left",
+          "center_index": 0,
+          "vertices": [
+            [
+              -0.5,
+              -0.5
+            ],
+            [
+              -0.5,
+              0.5
+            ],
+            [
+              0.0,
+              -0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 1,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 0,
+          "vertices": [
+            [
+              -0.5,
+              0.5
+            ],
+            [
+              0.5,
+              0.5
+            ],
+            [
+              0.0,
+              -0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 2,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 1,
+          "vertices": [
+            [
+              -0.5,
+              -0.5
+            ],
+            [
+              0.5,
+              -0.5
+            ],
+            [
+              0.0,
+              0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 3,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 2,
+          "vertices": [
+            [
+              -0.5,
+              0.5
+            ],
+            [
+              0.5,
+              0.5
+            ],
+            [
+              0.0,
+              -0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 4,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 3,
+          "vertices": [
+            [
+              -0.5,
+              -0.5
+            ],
+            [
+              0.5,
+              -0.5
+            ],
+            [
+              0.0,
+              0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 5,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 4,
+          "vertices": [
+            [
+              -0.5,
+              0.5
+            ],
+            [
+              0.5,
+              0.5
+            ],
+            [
+              0.0,
+              -0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 6,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 5,
+          "vertices": [
+            [
+              -0.5,
+              -0.5
+            ],
+            [
+              0.5,
+              -0.5
+            ],
+            [
+              0.0,
+              0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 7,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 6,
+          "vertices": [
+            [
+              -0.5,
+              0.5
+            ],
+            [
+              0.5,
+              0.5
+            ],
+            [
+              0.0,
+              -0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 8,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 7,
+          "vertices": [
+            [
+              -0.5,
+              -0.5
+            ],
+            [
+              0.5,
+              -0.5
+            ],
+            [
+              0.0,
+              0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 9,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 8,
+          "vertices": [
+            [
+              -0.5,
+              0.5
+            ],
+            [
+              0.5,
+              0.5
+            ],
+            [
+              0.0,
+              -0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 10,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 9,
+          "vertices": [
+            [
+              -0.5,
+              -0.5
+            ],
+            [
+              0.5,
+              -0.5
+            ],
+            [
+              0.0,
+              0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 11,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 10,
+          "vertices": [
+            [
+              -0.5,
+              0.5
+            ],
+            [
+              0.5,
+              0.5
+            ],
+            [
+              0.0,
+              -0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 12,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 11,
+          "vertices": [
+            [
+              -0.5,
+              -0.5
+            ],
+            [
+              0.5,
+              -0.5
+            ],
+            [
+              0.0,
+              0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 13,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 12,
+          "vertices": [
+            [
+              -0.5,
+              0.5
+            ],
+            [
+              0.5,
+              0.5
+            ],
+            [
+              0.0,
+              -0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 14,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 13,
+          "vertices": [
+            [
+              -0.5,
+              -0.5
+            ],
+            [
+              0.5,
+              -0.5
+            ],
+            [
+              0.0,
+              0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 15,
+          "shape": "half_triangle",
+          "edge": "right",
+          "center_index": 13,
+          "vertices": [
+            [
+              0.0,
+              0.5
+            ],
+            [
+              0.5,
+              0.5
+            ],
+            [
+              0.5,
+              -0.5
+            ]
+          ],
+          "sensitive": true
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "top",
+      "orientation": "y",
+      "count": 9,
+      "channel_offset": 16,
+      "span": "width",
+      "extrusion": "depth",
+      "pieces": [
+        {
+          "bar_id": 0,
+          "shape": "half_triangle",
+          "edge": "left",
+          "center_index": 0,
+          "vertices": [
+            [
+              -0.5,
+              -0.5
+            ],
+            [
+              -0.5,
+              0.5
+            ],
+            [
+              0.0,
+              -0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 1,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 0,
+          "vertices": [
+            [
+              -0.5,
+              0.5
+            ],
+            [
+              0.5,
+              0.5
+            ],
+            [
+              0.0,
+              -0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 2,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 1,
+          "vertices": [
+            [
+              -0.5,
+              -0.5
+            ],
+            [
+              0.5,
+              -0.5
+            ],
+            [
+              0.0,
+              0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 3,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 2,
+          "vertices": [
+            [
+              -0.5,
+              0.5
+            ],
+            [
+              0.5,
+              0.5
+            ],
+            [
+              0.0,
+              -0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 4,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 3,
+          "vertices": [
+            [
+              -0.5,
+              -0.5
+            ],
+            [
+              0.5,
+              -0.5
+            ],
+            [
+              0.0,
+              0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 5,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 4,
+          "vertices": [
+            [
+              -0.5,
+              0.5
+            ],
+            [
+              0.5,
+              0.5
+            ],
+            [
+              0.0,
+              -0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 6,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 5,
+          "vertices": [
+            [
+              -0.5,
+              -0.5
+            ],
+            [
+              0.5,
+              -0.5
+            ],
+            [
+              0.0,
+              0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 7,
+          "shape": "triangle",
+          "edge": null,
+          "center_index": 6,
+          "vertices": [
+            [
+              -0.5,
+              0.5
+            ],
+            [
+              0.5,
+              0.5
+            ],
+            [
+              0.0,
+              -0.5
+            ]
+          ],
+          "sensitive": true
+        },
+        {
+          "bar_id": 8,
+          "shape": "half_triangle",
+          "edge": "right",
+          "center_index": 6,
+          "vertices": [
+            [
+              0.0,
+              -0.5
+            ],
+            [
+              0.5,
+              -0.5
+            ],
+            [
+              0.5,
+              0.5
+            ]
+          ],
+          "sensitive": true
+        }
+      ]
+    }
+  ]
+}
