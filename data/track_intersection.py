@@ -19,9 +19,10 @@ from .particle_track import ParticleTrack, Vector3
 
 
 _EPS = 1.0e-12
+SPEED_OF_LIGHT_M_PER_S = 299_792_458.0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ScintillatorHit:
     """Geometric passage of one track through one scintillator sensitive volume."""
 
@@ -32,6 +33,8 @@ class ScintillatorHit:
     entry_m: Vector3
     exit_m: Vector3
     path_length_m: float
+    track_distance_m: float
+    time_ns: float
 
     @property
     def midpoint_m(self) -> Vector3:
@@ -151,6 +154,8 @@ def intersect_track_bar(
         entry_m=entry,
         exit_m=exit_,
         path_length_m=hi - lo,
+        track_distance_m=(lo + hi) * 0.5,
+        time_ns=((lo + hi) * 0.5 / SPEED_OF_LIGHT_M_PER_S) * 1.0e9,
     )
 
 
@@ -185,11 +190,7 @@ def intersect_track_rack(
 
         hits.append(hit)
 
-    def along_track(hit: ScintillatorHit) -> float:
-        return sum(
-            (p - o) * d
-            for p, o, d in zip(hit.midpoint_m, track.origin_m, track.direction)
-        )
-
-    hits.sort(key=along_track)
+    # Keep the ordering criterion explicit rather than enabling dataclass
+    # order=True, which would compare every field in declaration order.
+    hits.sort(key=lambda hit: hit.time_ns)
     return tuple(hits)

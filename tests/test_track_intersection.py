@@ -28,6 +28,8 @@ class TrackBarIntersectionTests(unittest.TestCase):
         self.assertIsNotNone(hit)
         self.assertAlmostEqual(hit.path_length_m, 0.1)
         self.assertEqual(hit.channel_id, 7)
+        self.assertAlmostEqual(hit.track_distance_m, 1.0)
+        self.assertAlmostEqual(hit.time_ns, 1.0 / 299_792_458.0 * 1.0e9)
 
     def test_vertical_track_outside_triangle_misses(self):
         track = ParticleTrack((0.0, 0.2, 1.0), (0.0, 0.0, -1.0))
@@ -75,6 +77,9 @@ class RackIntersectionTests(unittest.TestCase):
         hodoscopes_hit = {hit.hodoscope_id for hit in hits}
         self.assertEqual(hodoscopes_hit, {0, 1, 2})
         self.assertTrue(all(hit.path_length_m > 0.0 for hit in hits))
+        times = [hit.time_ns for hit in hits]
+        self.assertEqual(times, sorted(times))
+        self.assertTrue(all(b > a for a, b in zip(times, times[1:])))
 
     def test_forward_only_rejects_rack_behind_origin(self):
         rack = make_rack_geometry((4.0, 14.0, 27.0))

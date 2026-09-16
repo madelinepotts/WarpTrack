@@ -16,7 +16,7 @@ from typing import Iterable, Tuple
 RACK_UNIT_M = 0.04445  # 1U = 1.75 in
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class GeometryConfig:
     """Dimensions and segmentation of one hodoscope.
 
@@ -66,7 +66,7 @@ class GeometryConfig:
         return top_pitch
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ScintillatorBar:
     channel_id: int
     hodoscope_id: int
@@ -82,7 +82,7 @@ class ScintillatorBar:
     is_half_end: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Hodoscope:
     hodoscope_id: int
     rack_u: float
@@ -98,7 +98,7 @@ class Hodoscope:
         return tuple(bar for bar in self.bars if bar.layer_id == 0)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RackGeometry:
     config: GeometryConfig
     hodoscopes: Tuple[Hodoscope, ...]

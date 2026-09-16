@@ -18,7 +18,7 @@ from .particle_track import ParticleTrack
 from .track_intersection import ScintillatorHit, intersect_track_rack
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CosmicRayConfig:
     """Configuration for downward cosmic-ray track generation."""
 
@@ -42,7 +42,7 @@ class CosmicRayConfig:
             raise ValueError("max_attempts must be at least 1")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CosmicRayEvent:
     """One accepted generated primary and its geometric scintillator hits."""
 

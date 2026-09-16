@@ -8,7 +8,7 @@ from typing import Tuple
 Vector3 = Tuple[float, float, float]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ParticleTrack:
     """An infinite straight particle trajectory in rack coordinates.
 
