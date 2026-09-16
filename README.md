@@ -489,3 +489,19 @@ set DISTUTILS_USE_SDK=1
 python setup.py build_ext --inplace
 python -m unittest discover tests
 ```
+
+## Detector geometry model
+
+`data/detector_geometry.py` contains the first configurable rack/hodoscope geometry model used by WarpTrack.
+
+Current assumptions:
+
+- A rack contains at least three hodoscopes, with arbitrary/nonuniform rack-U positions so servers or other hardware can sit between them.
+- Each hodoscope occupies an approximately 2U-high envelope.
+- Each hodoscope contains 25 triangular-prism scintillators total: 9 in the top layer and 16 in the bottom layer.
+- The two layers touch and their scintillator axes are perpendicular.
+- Scintillators use the same nominal triangular cross-section in both layers.
+- The outer elements of each layer are identified as half-end elements so the packed triangular scintillators can form the rectangular detector envelope. Exact end-piece intersection geometry will be added with the particle-intersection step.
+- Default physical dimensions and rack-U positions are placeholders. Replace them with measured values when available.
+
+The geometry is intentionally independent of synthetic event generation so the same detector description can later be used with improved Monte Carlo, Geant4-derived events, and real detector data.
