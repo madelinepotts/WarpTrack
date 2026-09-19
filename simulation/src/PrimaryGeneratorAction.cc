@@ -91,9 +91,11 @@ PrimaryGeneratorAction::PrimaryGeneratorAction(RunAction* runAction)
 
     ConfigureMessenger();
 
-    if (sourceMode_ == "cry") {
-        InitializeCRY();
-    } else if (sourceMode_ != "gun") {
+    // Do not initialize CRY here. Batch macros are executed after this
+    // action is constructed, so eagerly initializing CRY makes gun-only
+    // validation runs look like CRY runs. CRY is initialized lazily when
+    // it is actually selected/used.
+    if (sourceMode_ != "cry" && sourceMode_ != "gun") {
         throw std::runtime_error(
             "Unknown WARPTRACK_SOURCE='" + sourceMode_ +
             "'. Use 'cry' or 'gun'.");
@@ -259,6 +261,12 @@ void PrimaryGeneratorAction::GenerateGunEvent(
 void PrimaryGeneratorAction::GenerateCRYEvent(
     G4Event* event)
 {
+    // Lazy initialization lets a macro switch to /warptrack/source gun
+    // without constructing an unused CRY generator first.
+    if (!cryGenerator_) {
+        InitializeCRY();
+    }
+
     std::vector<CRYParticle*> particles;
 
     cryGenerator_->genEvent(&particles);

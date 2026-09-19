@@ -1,8 +1,13 @@
 #pragma once
 
 #include "G4UserRunAction.hh"
+#include "globals.hh"
+
 #include "HitRecord.hh"
 #include "PrimaryRecord.hh"
+#include "TrackEndRecord.hh"
+
+#include <string>
 
 class TFile;
 class TTree;
@@ -17,6 +22,8 @@ public:
 
   void WriteHit(const HitRecord &);
   void WritePrimary(const PrimaryRecord &);
+
+  void RecordTrackEnd(const TrackEndRecord& record);
 
 private:
   TFile *outputFile_ = nullptr;
@@ -52,4 +59,25 @@ private:
   double primaryDirX_ = 0.0;
   double primaryDirY_ = 0.0;
   double primaryDirZ_ = 0.0;
+
+  // Track-end truth tree.
+  TTree* trackEndTree_ = nullptr;
+
+  G4int trackEndEventID_ = -1;
+  G4int trackEndTrackID_ = -1;
+  G4int trackEndParentID_ = -1;
+  G4int trackEndPDG_ = 0;
+
+  G4double trackEndStartKineticEnergyMeV_ = 0.0;
+  G4double trackEndEndKineticEnergyMeV_ = 0.0;
+
+  G4double trackEndXmm_ = 0.0;
+  G4double trackEndYmm_ = 0.0;
+  G4double trackEndZmm_ = 0.0;
+
+  G4double trackEndTrackLengthMm_ = 0.0;
+  G4double trackEndGlobalTimeNs_ = 0.0;
+
+  std::string trackEndEndProcess_;
+  bool trackEndStopped_ = false;
 };

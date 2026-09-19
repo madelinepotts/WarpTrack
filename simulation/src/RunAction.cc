@@ -1,8 +1,11 @@
 #include "RunAction.hh"
+#include "TrackEndRecord.hh"
 
 #include "G4SystemOfUnits.hh"
 #include "TFile.h"
 #include "TTree.h"
+
+#include <string>
 
 void RunAction::BeginOfRunAction(const G4Run *) {
   outputFile_ = TFile::Open("warptrack.root", "RECREATE");
@@ -39,6 +42,23 @@ void RunAction::BeginOfRunAction(const G4Run *) {
   primaryTree_->Branch("dir_x", &primaryDirX_);
   primaryTree_->Branch("dir_y", &primaryDirY_);
   primaryTree_->Branch("dir_z", &primaryDirZ_);
+
+  trackEndTree_ = new TTree(
+    "track_end", "Geant4 track termination truth");
+
+trackEndTree_->Branch("event_id", &trackEndEventID_);
+trackEndTree_->Branch("track_id", &trackEndTrackID_);
+trackEndTree_->Branch("parent_id", &trackEndParentID_);
+trackEndTree_->Branch("pdg", &trackEndPDG_);
+trackEndTree_->Branch("start_kinetic_energy_MeV", &trackEndStartKineticEnergyMeV_);
+trackEndTree_->Branch("end_kinetic_energy_MeV", &trackEndEndKineticEnergyMeV_);
+trackEndTree_->Branch("x_mm", &trackEndXmm_);
+trackEndTree_->Branch("y_mm", &trackEndYmm_);
+trackEndTree_->Branch("z_mm", &trackEndZmm_);
+trackEndTree_->Branch("track_length_mm", &trackEndTrackLengthMm_);
+trackEndTree_->Branch("global_time_ns", &trackEndGlobalTimeNs_);
+trackEndTree_->Branch("end_process", &trackEndEndProcess_);
+trackEndTree_->Branch("stopped", &trackEndStopped_);
 }
 
 void RunAction::WriteHit(const HitRecord &hit) {
@@ -87,6 +107,8 @@ void RunAction::EndOfRunAction(const G4Run *) {
     hitTree_->Write();
   if (primaryTree_)
     primaryTree_->Write();
+  if (trackEndTree_)
+    trackEndTree_->Write();
 
   outputFile_->Close();
 
@@ -94,4 +116,41 @@ void RunAction::EndOfRunAction(const G4Run *) {
   outputFile_ = nullptr;
   hitTree_ = nullptr;
   primaryTree_ = nullptr;
+  trackEndTree_ = nullptr;
+}
+
+void RunAction::RecordTrackEnd(const TrackEndRecord& record)
+{
+    if (trackEndTree_ == nullptr) {
+        return;
+    }
+
+    trackEndEventID_ = record.eventID;
+    trackEndTrackID_ = record.trackID;
+    trackEndParentID_ = record.parentID;
+    trackEndPDG_ = record.pdg;
+
+    trackEndStartKineticEnergyMeV_ =
+        record.startKineticEnergyMeV;
+
+    trackEndEndKineticEnergyMeV_ =
+        record.endKineticEnergyMeV;
+
+    trackEndXmm_ = record.xMm;
+    trackEndYmm_ = record.yMm;
+    trackEndZmm_ = record.zMm;
+
+    trackEndTrackLengthMm_ =
+        record.trackLengthMm;
+
+    trackEndGlobalTimeNs_ =
+        record.globalTimeNs;
+
+    trackEndEndProcess_ =
+        record.endProcess;
+
+    trackEndStopped_ =
+        record.stopped;
+
+    trackEndTree_->Fill();
 }

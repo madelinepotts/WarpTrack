@@ -1,0 +1,14 @@
+# WarpTrack controlled neutron validation
+#
+# Fires 100 MeV neutrons directly downward through the detector.
+# This isolates Geant4 neutron transport/scintillator response from CRY.
+
+/warptrack/source gun
+/run/initialize
+
+/gun/particle neutron
+/gun/position 0 0 1.90 m
+/gun/direction 0 0 -1
+/gun/energy 100 MeV
+
+/run/beamOn 10000

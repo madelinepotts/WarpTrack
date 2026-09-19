@@ -1,6 +1,7 @@
 #include "DetectorConstruction.hh"
 #include "PrimaryGeneratorAction.hh"
 #include "RunAction.hh"
+#include "SteppingAction.hh"
 
 #include "FTFP_BERT.hh"
 #include "G4RunManagerFactory.hh"
@@ -30,6 +31,8 @@ int main(int argc, char **argv) {
   runManager->SetUserInitialization(new DetectorConstruction(runAction));
 
   runManager->SetUserAction(new PrimaryGeneratorAction(runAction));
+
+  runManager->SetUserAction(new SteppingAction(runAction));
 
   runManager->SetUserAction(runAction);
 

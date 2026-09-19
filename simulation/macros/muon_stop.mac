@@ -1,0 +1,15 @@
+# Controlled low-energy muon stopping test.
+# Fire mu- vertically downward through the center of the rack.
+#
+# This is deliberately a low-energy stopping validation run, not a
+# realistic cosmic-ray spectrum. Once track-end truth is validated, tune
+# the energy to place the endpoint in a specific inter-hodoscope region.
+
+/warptrack/source gun
+
+/gun/particle mu-
+/gun/position 0 0 1.90 m
+/gun/direction 0 0 -1
+/gun/energy 30 MeV
+
+/run/beamOn 10
