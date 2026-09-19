@@ -1,0 +1,30 @@
+# Standard WarpTrack validation sample.
+# Produces warptrack.root without opening the visualizer.
+/warptrack/source cry
+
+# CRY particle species
+/warptrack/cry/returnNeutrons 1
+/warptrack/cry/returnProtons 1
+/warptrack/cry/returnGammas 1
+/warptrack/cry/returnElectrons 1
+/warptrack/cry/returnMuons 1
+/warptrack/cry/returnPions 1
+/warptrack/cry/returnKaons 1
+
+# CRY sampling configuration
+/warptrack/cry/date 9-18-2026
+/warptrack/cry/latitude 46.3
+/warptrack/cry/altitude 0
+/warptrack/cry/subboxLength 2
+/warptrack/cry/nParticlesMin 1
+/warptrack/cry/nParticlesMax 1000000
+/warptrack/cry/xoffset 0
+/warptrack/cry/yoffset 0
+/warptrack/cry/zoffset 0
+
+# Disable per-particle console spam for production-sized runs.
+/warptrack/cry/verbose 0
+
+# Apply all CRY settings above before beamOn.
+/warptrack/cry/apply
+/run/beamOn 10000

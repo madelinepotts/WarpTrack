@@ -20,3 +20,16 @@ build/
 .vs/
 .DS_Store
 Thumbs.db
+# External CRY checkout (installed by scripts/install_cry.ps1)
+external/cry/
+
+# Geant4 / ROOT runtime outputs
+*.root
+
+# Generated visualization / analysis outputs
+warptrack_event.png
+analysis/output/
+analysis/validation_output/
+
+# Generated analysis results
+analysis_output/

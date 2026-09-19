@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
 
   runManager->SetUserInitialization(new DetectorConstruction(runAction));
 
-  runManager->SetUserAction(new PrimaryGeneratorAction());
+  runManager->SetUserAction(new PrimaryGeneratorAction(runAction));
 
   runManager->SetUserAction(runAction);
 

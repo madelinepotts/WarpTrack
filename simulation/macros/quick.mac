@@ -1,0 +1,5 @@
+# Quick non-visual CRY smoke test.
+/warptrack/source cry
+/warptrack/cry/verbose 1
+/warptrack/cry/apply
+/run/beamOn 100

@@ -1,0 +1,17 @@
+# Diagnostic CRY sample that returns only muons.
+# This changes the sampled output population and should NOT be used as an
+# unbiased all-particle cosmic-ray training sample.
+/warptrack/source cry
+/warptrack/cry/returnNeutrons 0
+/warptrack/cry/returnProtons 0
+/warptrack/cry/returnGammas 0
+/warptrack/cry/returnElectrons 0
+/warptrack/cry/returnMuons 1
+/warptrack/cry/returnPions 0
+/warptrack/cry/returnKaons 0
+/warptrack/cry/subboxLength 2
+/warptrack/cry/nParticlesMin 1
+/warptrack/cry/nParticlesMax 1000000
+/warptrack/cry/verbose 0
+/warptrack/cry/apply
+/run/beamOn 10000
