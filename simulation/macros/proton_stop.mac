@@ -1,0 +1,19 @@
+# Controlled low-energy proton stopping test.
+# Fire protons vertically downward through the center of the rack.
+#
+# Purpose:
+#   Validate proton track-end truth and identify protons that
+#   pass through H2 and stop geometrically between H2 and H1.
+#
+# Current geometry contains air between hodoscopes, not server material.
+
+/warptrack/source gun
+
+/gun/particle proton
+/gun/position 0 0 1.90 m
+/gun/direction 0 0 -1
+
+# Initial test energy. We will tune this based on the measured endpoint.
+/gun/energy 150 MeV
+
+/run/beamOn 10

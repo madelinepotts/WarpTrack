@@ -1,5 +1,7 @@
 #pragma once
+
 #include "G4VUserDetectorConstruction.hh"
+
 #include <vector>
 
 class G4LogicalVolume;

@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "units": "mm",
   "rack": {
     "rack_unit_height": 44.45,
@@ -571,6 +571,54 @@
           "sensitive": true
         }
       ]
+    }
+  ],
+  "server_model": {
+    "enabled": true
+  },
+  "server_types": {
+    "generic_1u": {
+      "height_u": 1,
+      "width": 482.6,
+      "depth": 800.0,
+      "chassis_material": "G4_Al",
+      "wall_thickness": 1.5,
+      "interior_density_g_cm3": 0.3
+    },
+    "generic_2u": {
+      "height_u": 2,
+      "width": 482.6,
+      "depth": 800.0,
+      "chassis_material": "G4_STAINLESS-STEEL",
+      "wall_thickness": 1.5,
+      "interior_density_g_cm3": 0.3
+    }
+  },
+  "servers": [
+    {
+      "id": 0,
+      "rack_u": 7.0,
+      "type": "generic_1u"
+    },
+    {
+      "id": 1,
+      "rack_u": 9.0,
+      "type": "generic_2u"
+    },
+    {
+      "id": 2,
+      "rack_u": 17.0,
+      "type": "generic_2u"
+    },
+    {
+      "id": 3,
+      "rack_u": 20.0,
+      "type": "generic_1u"
+    },
+    {
+      "id": 4,
+      "rack_u": 23.0,
+      "type": "generic_2u"
     }
   ]
 }

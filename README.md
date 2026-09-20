@@ -559,3 +559,12 @@ measured values are supplied.
 ## Shared detector geometry
 
 `geometry/detector_geometry.json` is now the single source of truth for detector dimensions, hodoscope instances, channel segmentation, and scintillator polygons. Python loads it directly. CMake regenerates a C++ header from the same JSON before building Geant4. Geant4 constructs the triangular prisms as tessellated solids in global-aligned coordinates, eliminating separate layer rotation conventions. To expand the rack or detector, edit the JSON and rebuild.
+
+## Configurable Geant4 server model
+
+`geometry/detector_geometry.json` now describes individual rack servers instead of filling every detector gap with a solid block. Each server has an ID, a center position in rack units (`rack_u`), and a named type. The supplied generic types demonstrate both 1U and 2U hardware; adding or moving servers requires only JSON changes. Empty rack slots remain `G4_AIR`.
+
+Each server is modeled as a 1.5 mm metal chassis containing a homogeneous, lower-density effective electronics volume. The example 1U chassis uses `G4_Al`; the example 2U chassis uses `G4_STAINLESS-STEEL`. The interior density is 0.30 g/cm^3 and its mass fractions are H 4%, C 18%, O 18%, Al 20%, Si 15%, Fe 10%, and Cu 15%. This intentionally represents the aggregate material budget of PCBs, silicon, heat sinks, wiring, power hardware, structural metal, plastics/resins, and internal void space without modeling a particular vendor's server.
+
+The server height is derived from `height_u * rack.rack_unit_height`, so 1U and 2U configurations are physical geometry, not labels. Track-end truth still keeps geometry (`stop_region`, neighboring hodoscope IDs) separate from the Geant4 material name (`stop_material`). A stop in a chassis therefore reports `G4_Al` or `G4_STAINLESS-STEEL`, while a stop in the effective interior reports `WarpTrack_ServerInterior_<type>`.
+

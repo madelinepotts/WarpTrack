@@ -21,7 +21,19 @@ struct TrackEndRecord
 
     G4String endProcess;
 
+    // Geometric/material truth at the terminal position.  Geometry and
+    // material are intentionally separate: a track may stop between
+    // hodoscopes in G4_AIR today and in server material in a future model.
+    G4String stopRegion;
+    G4int stopHodoscopeID = -1;
+    G4int gapUpperHodoscopeID = -1;
+    G4int gapLowerHodoscopeID = -1;
+    G4String stopMaterial;
+    G4int stopServerID = -1;
+    G4String stopServerType;
+
     // Classification is deliberately stored as truth information.
     // It must NOT be used as an ML input feature.
     G4bool stopped = false;
+    G4bool stoppedBetweenHodoscopes = false;
 };

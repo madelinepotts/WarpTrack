@@ -79,5 +79,14 @@ private:
   G4double trackEndGlobalTimeNs_ = 0.0;
 
   std::string trackEndEndProcess_;
+  std::string trackEndStopRegion_;
+  int trackEndStopHodoscopeID_ = -1;
+  int trackEndGapUpperHodoscopeID_ = -1;
+  int trackEndGapLowerHodoscopeID_ = -1;
+  std::string trackEndStopMaterial_;
+  int trackEndStopServerID_ = -1;
+  std::string trackEndStopServerType_;
   bool trackEndStopped_ = false;
+  bool trackEndStoppedBetweenHodoscopes_ = false;
+  bool trackEndStoppedInServer_ = false;
 };

@@ -58,7 +58,16 @@ trackEndTree_->Branch("z_mm", &trackEndZmm_);
 trackEndTree_->Branch("track_length_mm", &trackEndTrackLengthMm_);
 trackEndTree_->Branch("global_time_ns", &trackEndGlobalTimeNs_);
 trackEndTree_->Branch("end_process", &trackEndEndProcess_);
+trackEndTree_->Branch("stop_region", &trackEndStopRegion_);
+trackEndTree_->Branch("stop_hodoscope_id", &trackEndStopHodoscopeID_);
+trackEndTree_->Branch("gap_upper_hodoscope_id", &trackEndGapUpperHodoscopeID_);
+trackEndTree_->Branch("gap_lower_hodoscope_id", &trackEndGapLowerHodoscopeID_);
+trackEndTree_->Branch("stop_material", &trackEndStopMaterial_);
+trackEndTree_->Branch("stop_server_id", &trackEndStopServerID_);
+trackEndTree_->Branch("stop_server_type", &trackEndStopServerType_);
 trackEndTree_->Branch("stopped", &trackEndStopped_);
+trackEndTree_->Branch("stopped_between_hodoscopes", &trackEndStoppedBetweenHodoscopes_);
+trackEndTree_->Branch("stopped_in_server", &trackEndStoppedInServer_);
 }
 
 void RunAction::WriteHit(const HitRecord &hit) {
@@ -149,8 +158,20 @@ void RunAction::RecordTrackEnd(const TrackEndRecord& record)
     trackEndEndProcess_ =
         record.endProcess;
 
+    trackEndStopRegion_ = record.stopRegion;
+    trackEndStopHodoscopeID_ = record.stopHodoscopeID;
+    trackEndGapUpperHodoscopeID_ = record.gapUpperHodoscopeID;
+    trackEndGapLowerHodoscopeID_ = record.gapLowerHodoscopeID;
+    trackEndStopMaterial_ = record.stopMaterial;
+    trackEndStopServerID_ = record.stopServerID;
+    trackEndStopServerType_ = record.stopServerType;
+
     trackEndStopped_ =
         record.stopped;
+    trackEndStoppedBetweenHodoscopes_ = record.stoppedBetweenHodoscopes;
+    // Object-level truth: the terminal point is inside a configured server
+    // and Geant4 classified the track as stopped. Keep this out of ML inputs.
+    trackEndStoppedInServer_ = record.stopped && record.stopServerID >= 0;
 
     trackEndTree_->Fill();
 }

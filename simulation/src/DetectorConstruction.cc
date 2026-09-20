@@ -1,8 +1,10 @@
 #include "DetectorConstruction.hh"
 #include "DetectorGeometryGenerated.hh"
 #include "G4Box.hh"
+#include "G4Colour.hh"
 #include "G4ExtrudedSolid.hh"
 #include "G4LogicalVolume.hh"
+#include "G4Material.hh"
 #include "G4NistManager.hh"
 #include "G4PVPlacement.hh"
 #include "G4RotationMatrix.hh"
@@ -178,8 +180,99 @@ G4VPhysicalVolume *DetectorConstruction::Construct() {
       new G4PVPlacement(nullptr, {}, worldLV, "WorldPV", nullptr, false, 0, true);
   worldLV->SetVisAttributes(G4VisAttributes::GetInvisible());
 
-  for (std::size_t h = 0; h < rackU.size(); ++h) {
-    const G4double centerZ = rackU[h] * rackUnitMM * mm;
+  // Configurable 1U/2U server model. Each server is an individual rack
+  // device from detector_geometry.json. The outer logical volume is the
+  // chassis (aluminum or stainless steel); a lower-density effective
+  // electronics material fills the interior. Empty rack slots remain air.
+  //
+  // The effective interior is intentionally generic: H/C/O represent PCB
+  // resin/plastics, Si represents semiconductor/glass content, and Al/Fe/Cu
+  // represent heat sinks, chassis-adjacent hardware, traces, wiring and power
+  // components. Its low bulk density also accounts for the substantial air
+  // volume inside a real server without modeling vendor-specific components.
+  if (serverModelEnabled) {
+    auto *H = nist->FindOrBuildElement("H");
+    auto *C = nist->FindOrBuildElement("C");
+    auto *O = nist->FindOrBuildElement("O");
+    auto *Al = nist->FindOrBuildElement("Al");
+    auto *Si = nist->FindOrBuildElement("Si");
+    auto *Fe = nist->FindOrBuildElement("Fe");
+    auto *Cu = nist->FindOrBuildElement("Cu");
+
+    for (const auto &server : servers) {
+      if (server.typeIndex < 0 ||
+          static_cast<std::size_t>(server.typeIndex) >= serverTypes.size()) {
+        throw std::runtime_error("Invalid server type index");
+      }
+      const auto &type = serverTypes[server.typeIndex];
+      auto *chassisMaterial = nist->FindOrBuildMaterial(type.chassisMaterial);
+      if (chassisMaterial == nullptr) {
+        throw std::runtime_error(std::string("Unable to build chassis material: ") +
+                                 type.chassisMaterial);
+      }
+
+      const G4double serverWidth = type.widthMM * mm;
+      const G4double serverDepth = type.depthMM * mm;
+      const G4double serverHeight = type.heightU * rackUnitMM * mm;
+      const G4double wall = type.wallThicknessMM * mm;
+      if (serverWidth <= 2.0 * wall || serverDepth <= 2.0 * wall ||
+          serverHeight <= 2.0 * wall) {
+        throw std::runtime_error("Server wall thickness leaves no interior volume");
+      }
+
+      const std::string suffix = "_" + std::to_string(server.id);
+      auto *serverSolid = new G4Box("ServerChassisSolid" + suffix,
+                                    serverWidth / 2.0,
+                                    serverDepth / 2.0,
+                                    serverHeight / 2.0);
+      auto *serverLV = new G4LogicalVolume(serverSolid, chassisMaterial,
+                                           "ServerChassisLV" + suffix);
+
+      // One effective electronics material per server type/density. Geant4
+      // owns these materials for the duration of the run.
+      const std::string interiorName =
+          "WarpTrack_ServerInterior_" + std::string(type.name);
+      G4Material *interiorMaterial =
+          G4Material::GetMaterial(interiorName, false);
+      if (interiorMaterial == nullptr) {
+        interiorMaterial = new G4Material(
+            interiorName, type.interiorDensityGCM3 * g / cm3, 7);
+        interiorMaterial->AddElement(H, 0.04);
+        interiorMaterial->AddElement(C, 0.18);
+        interiorMaterial->AddElement(O, 0.18);
+        interiorMaterial->AddElement(Al, 0.20);
+        interiorMaterial->AddElement(Si, 0.15);
+        interiorMaterial->AddElement(Fe, 0.10);
+        interiorMaterial->AddElement(Cu, 0.15);
+      }
+
+      auto *interiorSolid = new G4Box(
+          "ServerInteriorSolid" + suffix,
+          serverWidth / 2.0 - wall,
+          serverDepth / 2.0 - wall,
+          serverHeight / 2.0 - wall);
+      auto *interiorLV = new G4LogicalVolume(
+          interiorSolid, interiorMaterial, "ServerInteriorLV" + suffix);
+      new G4PVPlacement(nullptr, {}, interiorLV, "ServerInteriorPV" + suffix,
+                        serverLV, false, server.id, true);
+
+      auto *chassisVis = new G4VisAttributes(G4Colour(0.45, 0.45, 0.50));
+      chassisVis->SetForceWireframe(true);
+      serverLV->SetVisAttributes(chassisVis);
+      auto *interiorVis = new G4VisAttributes(G4Colour(0.30, 0.55, 0.35));
+      interiorVis->SetForceSolid(true);
+      interiorLV->SetVisAttributes(interiorVis);
+
+      const G4double centerZ = server.rackU * rackUnitMM * mm;
+      new G4PVPlacement(nullptr, G4ThreeVector(0.0, 0.0, centerZ), serverLV,
+                        "ServerChassisPV" + suffix, worldLV, false,
+                        server.id, true);
+    }
+  }
+
+  for (const auto &hodoscope : hodoscopes) {
+    const int hodoscopeID = hodoscope.id;
+    const G4double centerZ = hodoscope.rackU * rackUnitMM * mm;
 
     for (const auto &p : pieces) {
       const bool bottom = p.layer == 0;
@@ -187,9 +280,12 @@ G4VPhysicalVolume *DetectorConstruction::Construct() {
       const G4double span = bottom ? depth : width;
       const G4double length = bottom ? width : depth;
       const G4double pitch = base / 2.0;
-      const G4double u = -span / 2.0 + base / 2.0 + p.centerIndex * pitch;
-      const G4double z = centerZ +
-                         (bottom ? -layerHeight / 2.0 : layerHeight / 2.0);
+      const G4double u =
+          -span / 2.0 + base / 2.0 + p.centerIndex * pitch;
+
+      const G4double z =
+          centerZ +
+          (bottom ? -layerHeight / 2.0 : layerHeight / 2.0);
 
       // The nominal bar cell remains WorldLV air. Only the inset sensitive
       // prism is placed. This creates a 1 um air layer on all five prism
@@ -198,8 +294,10 @@ G4VPhysicalVolume *DetectorConstruction::Construct() {
           makePrism(p, base, layerHeight, length, kScintillatorAirWrap);
 
       const std::string name =
-          (bottom ? "Bottom" : "Top") + std::string("ScintillatorLV_") +
+          (bottom ? "Bottom" : "Top") +
+          std::string("ScintillatorLV_") +
           std::to_string(p.bar);
+
       auto *lv = new G4LogicalVolume(solid, scint, name);
 
       if (p.sensitive) {
@@ -207,13 +305,24 @@ G4VPhysicalVolume *DetectorConstruction::Construct() {
       }
 
       const G4ThreeVector position =
-          bottom ? G4ThreeVector(0.0, u, z) : G4ThreeVector(u, 0.0, z);
-      const int channel = static_cast<int>(h) * channelsPerHodoscope +
-                          p.channelOffset + p.bar;
+          bottom ? G4ThreeVector(0.0, u, z)
+                : G4ThreeVector(u, 0.0, z);
 
-      new G4PVPlacement(makePlacementRotation(bottom), position, lv,
-                        bottom ? "BottomScintillatorPV" : "TopScintillatorPV",
-                        worldLV, false, channel, true);
+      const int channel =
+          hodoscopeID * channelsPerHodoscope +
+          p.channelOffset +
+          p.bar;
+
+      new G4PVPlacement(
+          makePlacementRotation(bottom),
+          position,
+          lv,
+          bottom ? "BottomScintillatorPV"
+                : "TopScintillatorPV",
+          worldLV,
+          false,
+          channel,
+          true);
     }
   }
 
