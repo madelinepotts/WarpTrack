@@ -4,6 +4,10 @@ WarpTrack is a CUDA + PyTorch detector-ML project for reconstructing and classif
 
 The project is designed around one rule: **if the real detector cannot know it, it is not an ML input**. Geant4/CRY truth is retained for labels, validation, and efficiency studies but is kept separate from detector observables.
 
+## v0.1.0 status
+
+The first tagged milestone is an end-to-end working baseline: configurable Geant4 detector/server simulation, CRY production, ROOT truth/output, detector-observable reconstruction and triggering, million-event multithreaded production, and CUDA PyTorch multitask training/evaluation.
+
 ## Current ML tasks
 
 WarpTrack currently exposes two supervised targets:
@@ -62,7 +66,7 @@ The default batch macro is `simulation/macros/run.mac`:
 /warptrack/source cry
 /warptrack/cry/verbose 0
 /warptrack/cry/apply
-/run/beamOn 10000
+/run/beamOn 1000000
 ```
 
 `/warptrack/cry/apply` must appear after CRY configuration changes and before `/run/beamOn`.
@@ -102,7 +106,7 @@ Known development configuration:
 From `simulation`:
 
 ```powershell
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DGeant4_DIR="E:\Geant4\Geant4-11.4\lib\cmake\Geant4" -DROOT_DIR="E:\root_v6.40.02\cmake"
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DGeant4_DIR="E:\Geant4\Geant4-11.4\lib\cmake\Geant4"
 cmake --build build --config Release
 ```
 
@@ -373,6 +377,185 @@ WarpTrack/
 └── train.py
 ```
 
+
+## Reproducing the v0.1.0 baseline
+
+The commands below reproduce the validated v0.1.0 path on the Windows development system used for the first tagged baseline. Paths to Geant4 and ROOT are installation-specific; change them if your local installations differ.
+
+### 1. Clone the repository
+
+```powershell
+git clone <your-WarpTrack-repository-URL>
+cd WarpTrack
+git checkout v0.1.0
+```
+
+If reproducing from the working tree before the tag is pushed, stay on the corresponding commit instead of checking out the tag.
+
+### 2. Install CRY
+
+From the repository root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_cry.ps1
+```
+
+CRY is the production cosmic-ray source. One CRY shower is preserved as one Geant4 event, including correlated primaries.
+
+### 3. Configure the Geant4/ROOT simulation
+
+The validated Windows configuration used Geant4 11.4.x and ROOT 6.40.x:
+
+```powershell
+cd simulation
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DGeant4_DIR="E:\Geant4\Geant4-11.4\lib\cmake\Geant4" -DROOT_DIR="E:\root_v6.40.02\cmake"
+cmake --build build --config Release
+```
+
+If required by the local Geant4 installation:
+
+```powershell
+$env:GEANT4_DATA_DIR="E:\Geant4\Geant4-11.4\share\Geant4\data"
+```
+
+### 4. Validate geometry before production
+
+```powershell
+.\build\Release\warptrack_sim.exe .\macros\geometry_check.mac
+```
+
+Do not proceed with production if Geant4 reports geometry/navigation overlap errors.
+
+### 5. Generate the production CRY dataset
+
+The v0.1.0 production macro generates 1,000,000 Geant4 events. The validated production run used 16 worker threads:
+
+```powershell
+.\build\Release\warptrack_sim.exe .\macros\run.mac 16
+```
+
+The expected output is:
+
+```text
+simulation\warptrack.root
+```
+
+Geant4 MT output ordering is not treated as deterministic. Downstream processing associates records by `event_id`, not ROOT row order.
+
+### 6. Validate event-ID integrity
+
+Return to the repository root:
+
+```powershell
+cd ..
+python -c "import uproot,numpy as np; f=uproot.open(r'simulation\warptrack.root'); x=f['primaries']['event_id'].array(library='np'); u=np.unique(x); print('rows:',len(x)); print('unique events:',len(u)); print('min/max:',u.min(),u.max()); print('missing:',1000000-len(u)); print('expected IDs:',np.array_equal(u,np.arange(1000000)))"
+```
+
+The v0.1.0 production file produced:
+
+```text
+rows: 1028381
+unique events: 1000000
+min/max: 0 999999
+missing: 0
+expected IDs: True
+```
+
+### 7. Summarize and validate the production dataset
+
+```powershell
+python -m data.summarize_dataset simulation\warptrack.root
+python .\analysis\validate_simulation.py .\simulation\warptrack.root
+```
+
+The validated v0.1.0 summary begins with:
+
+```text
+Generated events:          1000000
+Primary particles:         1028381
+Single-primary events:     978589
+Multi-primary events:      21411
+Events with >=1 bar hit:   100168
+Detector-active fraction:  10.02%
+Triggered events:          53948
+Trigger fraction:          5.39%
+Trigger/active fraction:   53.86%
+```
+
+The trigger definition is at least four distinct physical scintillator bars with at least 0.5 MeV summed deposited energy per bar.
+
+### 8. Build and test the CUDA extension
+
+The validated ML environment used Python 3.14, PyTorch 2.14.0+cu130, CUDA Toolkit 13.3, and Visual Studio 2022 Build Tools/MSVC.
+
+From a shell in which the Visual Studio x64 compiler and CUDA toolkit are available:
+
+```powershell
+python setup.py build_ext --inplace
+python -m unittest discover tests
+python -c "import warptrack_cuda; print('WarpTrack CUDA extension loaded')"
+```
+
+A successful extension build is not a substitute for the unit tests; run both.
+
+### 9. Inspect reconstructed detector events
+
+```powershell
+python -m data.inspect_dataset --root simulation\warptrack.root --event 0
+```
+
+Reconstruction aggregates all Geant4 deposits in a physical scintillator bar. Track ID, parent ID, particle identity, endpoint material, and server identity remain simulation truth and are not model inputs.
+
+### 10. Train the v0.1.0 multitask baseline
+
+```powershell
+python train_root.py simulation\warptrack.root --epochs 20 --batch-size 256
+```
+
+Expected training-set class counts for the deterministic v0.1.0 split are:
+
+```text
+triggered events: 53948
+train particle counts: [34582, 4123, 2477, 455]
+train stop counts: positive=2621 negative=40537
+```
+
+The run writes:
+
+```text
+warptrack_multitask.pt
+warptrack_multitask.loss.png
+```
+
+The held-out v0.1.0 reference metrics are:
+
+```text
+particle accuracy:  0.6354
+particle macro-F1:  0.4478
+
+stopping precision: 0.3207
+stopping recall:    0.7075
+stopping F1:        0.4414
+stopping PR-AUC:    0.4685
+stopping ROC-AUC:   0.8657
+```
+
+Exact floating-point training results can depend on the software/hardware environment, but the dataset counts, split sizes, and qualitative behavior provide useful reproducibility checks.
+
+### 11. Optional controlled-particle validation
+
+Controlled randomized samples can be generated independently of CRY:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_training_samples.ps1 -EventsPerSpecies 100
+```
+
+These samples are intended for detector-response and physics validation rather than as a replacement for the CRY production distribution.
+
+### 12. Preserve the baseline before the next experiment
+
+The v0.1.0 model intentionally remains the reference for future class-weighting and early-stopping experiments. Generated production ROOT files, model checkpoints, and diagnostic plots should normally remain build/data artifacts rather than source-controlled release content unless explicitly desired.
+
 ## Development direction
 
 The current detector representation is ready for realistic CRY-driven ML development. The intended path is:
@@ -395,4 +578,119 @@ CUDA-accelerated neighborhood/point-cloud operations
 real detector data using the same observable representation
 ```
 
-The current v1 detector trigger is now defined as at least four distinct bars with at least 0.5 MeV summed deposited energy per bar. Near-term work is to generate a larger realistic CRY sample and train/evaluate the multitask model on triggered events without leaking simulation truth into its inputs.
+The current v1 detector trigger is defined as at least four distinct bars with at least 0.5 MeV summed deposited energy per bar. A one-million-event CRY production sample has now been generated and validated, and the first detector-only multitask PyTorch baseline has been trained on the triggered subset without leaking simulation truth into its inputs. Near-term work is focused on improving class-imbalance handling, adding early stopping, and building inference/event-visualization workflows.
+
+## Production performance: fast summary
+
+`data/summarize_dataset.py` is implemented as a bulk uproot/NumPy analysis. It does **not** call `RootEventDataset.__getitem__()` once per generated event, so million-event production files can be summarized without constructing one million PyTorch event dictionaries.
+
+```powershell
+python -m data.summarize_dataset simulation\warptrack.root
+```
+
+The fast path still applies the same physics definitions used by the dataset: Geant4 steps are summed by `(event_id, channel_id)`, the v1 trigger is `>=4` distinct bars at `>=0.5 MeV/bar`, same-family multi-primary showers retain a particle-family label, and `stopped_in_server` is true when any primary (`parent_id == 0`) has that truth flag.
+
+## Geant4 multithreading
+
+The simulation now uses Geant4 event-level multithreading when the installed Geant4 was built with MT support. `ActionInitialization` creates worker-local primary generators, run actions, and stepping actions. Each worker therefore owns its own CRY generator. ROOT output is written through Geant4's analysis manager with ntuple merging enabled, preserving the existing `hits`, `primaries`, and `track_end` tree/branch interface consumed by Python.
+
+The default worker count is `hardware_concurrency - 1`. Override it with a second command-line argument:
+
+```powershell
+cd simulation
+.\build\Release\warptrack_sim.exe .\macros\run.mac 16
+```
+
+or with an environment variable:
+
+```powershell
+$env:WARPTRACK_THREADS=16
+.\build\Release\warptrack_sim.exe .\macros\run.mac
+```
+
+A Geant4 installation built without MT support falls back to serial execution. After changing from serial to MT, validate a modest run before launching production: confirm all three ROOT trees exist, event IDs span the requested event count, and the detector-active/trigger fractions remain statistically consistent with the serial baseline.
+
+## ROOT multi-task PyTorch training
+
+`train_root.py` trains the detector-only multi-task baseline directly from triggered ROOT events:
+
+```powershell
+python train_root.py simulation\warptrack.root --epochs 20 --batch-size 256
+```
+
+The training dataset uses only events passing the current v1 trigger. Model inputs are fixed per-channel detector observables only: summed energy deposition, relative channel time, and the hit mask. Energy is transformed with `log1p`; time is scaled numerically. No PDG, parent/track ID, Geant4 endpoint, material, server identity, or other Monte Carlo truth enters the model input.
+
+The shared encoder has two heads:
+
+- particle family: muon, electron, photon, proton
+- stopped in server: binary logit
+
+Neutron remains represented in the simulation/dataset truth schema, but the current CRY production has no detector-active neutron examples, so it is excluded from the initial particle head. Mixed/unsupported showers are retained for stopping training while their particle-classification loss is masked.
+
+The v0.1.0 baseline uses inverse-frequency particle-class weights and a positive-class weight for the imbalanced stopping target. The deterministic split is 80% train, 10% validation, and 10% test. Evaluation includes particle accuracy, per-class precision/recall/F1, particle macro-F1, particle confusion matrix, stopping precision/recall/F1, PR-AUC, ROC-AUC, and a stopping confusion matrix. Training and validation loss are also saved as a diagnostic plot.
+
+For the million-event ROOT file, `RootEventDataset(triggered_only=True)` computes trigger selection in bulk before building row maps and discards non-triggered rows from its in-memory training representation. This avoids constructing Python indexing structures for all one million generated events.
+
+## v0.1.0 validated production dataset
+
+The first tagged baseline uses a Geant4-MT/CRY production run containing **1,000,000 generated events** and **1,028,381 primary particles**.
+
+| Quantity | v0.1.0 production sample |
+| --- | ---: |
+| Generated events | 1,000,000 |
+| Single-primary events | 978,589 |
+| Multi-primary events | 21,411 |
+| Detector-active events | 100,168 |
+| Detector-active fraction | 10.02% |
+| Triggered events | 53,948 |
+| Trigger fraction | 5.39% |
+| Triggered stopping events | 3,300 |
+| Stopping fraction among triggered events | 6.12% |
+
+Triggered particle-family targets are:
+
+| Family | Triggered events |
+| --- | ---: |
+| Muon | 43,212 |
+| Electron | 5,159 |
+| Photon | 3,131 |
+| Proton | 553 |
+| Neutron | 0 |
+| Mixed/unsupported | 1,893 |
+
+The absence of detector-active CRY neutrons is a property of this CRY production sample and detector acceptance, not evidence that Geant4 neutron transport is disabled. Controlled neutron-gun tests produce detector response.
+
+## v0.1.0 ML baseline
+
+The first tagged ML result is a 20-epoch CUDA training run on the million-event production sample. The training split contained 34,582 muon, 4,123 electron, 2,477 photon, and 455 proton classification examples, plus 2,621 positive stopping examples.
+
+Held-out particle-classification results:
+
+| Class | Support | Precision | Recall | F1 |
+| --- | ---: | ---: | ---: | ---: |
+| Muon | 4,294 | 0.9474 | 0.6290 | 0.7561 |
+| Electron | 519 | 0.2216 | 0.6513 | 0.3307 |
+| Photon | 350 | 0.4556 | 0.7029 | 0.5528 |
+| Proton | 48 | 0.0881 | 0.5417 | 0.1516 |
+
+Overall particle metrics:
+
+```text
+accuracy:  0.6354
+macro-F1:  0.4478
+```
+
+Held-out stopping results:
+
+```text
+precision: 0.3207
+recall:    0.7075
+F1:        0.4414
+PR-AUC:    0.4685
+ROC-AUC:   0.8657
+```
+
+This baseline demonstrates that detector-only observables contain useful information for both tasks, but it also exposes the next optimization targets. Validation loss reaches its minimum early while training loss continues to fall, indicating overfitting in the longer run. Full inverse-frequency particle weighting also overcompensates for rare classes, especially proton: the model recovers 26 of 48 test protons but produces many false proton predictions. The next training iteration will test softer class weighting, such as inverse-square-root frequency, together with early stopping before considering a larger model.
+
+The v0.1.0 numbers are intentionally retained as the reference baseline for future comparisons.
+

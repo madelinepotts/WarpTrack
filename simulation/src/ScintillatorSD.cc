@@ -1,12 +1,13 @@
 #include "ScintillatorSD.hh"
 #include "G4Event.hh"
 #include "G4EventManager.hh"
+#include "G4RunManager.hh"
 #include "G4Step.hh"
 #include "G4Track.hh"
 #include "HitRecord.hh"
 #include "RunAction.hh"
-ScintillatorSD::ScintillatorSD(const G4String &n, RunAction *r)
-    : G4VSensitiveDetector(n), runAction_(r) {}
+ScintillatorSD::ScintillatorSD(const G4String &n)
+    : G4VSensitiveDetector(n) {}
 G4bool ScintillatorSD::ProcessHits(G4Step *step, G4TouchableHistory *) {
   auto edep = step->GetTotalEnergyDeposit();
   if (edep <= 0.)
@@ -30,6 +31,10 @@ G4bool ScintillatorSD::ProcessHits(G4Step *step, G4TouchableHistory *) {
   hit.edep = edep;
   hit.time = pre->GetGlobalTime();
   hit.position = 0.5 * (pre->GetPosition() + post->GetPosition());
-  runAction_->WriteHit(hit);
+  const auto* runAction = dynamic_cast<const RunAction*>(
+      G4RunManager::GetRunManager()->GetUserRunAction());
+  if (runAction != nullptr) {
+    runAction->WriteHit(hit);
+  }
   return true;
 }

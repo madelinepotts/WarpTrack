@@ -12,7 +12,6 @@
 #include "G4SystemOfUnits.hh"
 #include "G4TwoVector.hh"
 #include "G4VisAttributes.hh"
-#include "RunAction.hh"
 #include "ScintillatorSD.hh"
 
 #include <algorithm>
@@ -157,8 +156,6 @@ G4RotationMatrix *makePlacementRotation(bool bottom) {
 }
 
 } // namespace
-
-DetectorConstruction::DetectorConstruction(RunAction *r) : runAction_(r) {}
 
 G4VPhysicalVolume *DetectorConstruction::Construct() {
   scintillatorLVs_.clear();
@@ -330,7 +327,7 @@ G4VPhysicalVolume *DetectorConstruction::Construct() {
 }
 
 void DetectorConstruction::ConstructSDandField() {
-  auto *sd = new ScintillatorSD("ScintillatorSD", runAction_);
+  auto *sd = new ScintillatorSD("ScintillatorSD");
   G4SDManager::GetSDMpointer()->AddNewDetector(sd);
 
   for (auto *lv : scintillatorLVs_) {

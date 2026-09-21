@@ -1,84 +1,64 @@
+#include "ActionInitialization.hh"
 #include "DetectorConstruction.hh"
-#include "PrimaryGeneratorAction.hh"
-#include "RunAction.hh"
-#include "SteppingAction.hh"
 
 #include "FTFP_BERT.hh"
 #include "G4RunManagerFactory.hh"
 #include "G4UIExecutive.hh"
 #include "G4UImanager.hh"
 #include "G4VisExecutive.hh"
+#ifdef G4MULTITHREADED
+#include "G4MTRunManager.hh"
+#endif
 
-int main(int argc, char **argv) {
-  // Create a serial Geant4 run manager.
-  auto *runManager =
-      G4RunManagerFactory::CreateRunManager(G4RunManagerType::Serial);
+#include <algorithm>
+#include <cstdlib>
+#include <iostream>
+#include <thread>
 
-  // ---------------------------------------------------------
-  // Physics
-  //
-  // Geant4 11.4 requires the physics list to be instantiated
-  // and assigned before user action classes such as RunAction
-  // are instantiated.
-  // ---------------------------------------------------------
+namespace {
+int requestedThreads(int argc, char** argv) {
+  if (argc > 2) {
+    return std::max(1, std::atoi(argv[2]));
+  }
+  if (const char* env = std::getenv("WARPTRACK_THREADS")) {
+    const int value = std::atoi(env);
+    if (value > 0) return value;
+  }
+  const unsigned int hw = std::thread::hardware_concurrency();
+  return static_cast<int>(hw > 1 ? hw - 1 : 1);
+}
+}
+
+int main(int argc, char** argv) {
+#ifdef G4MULTITHREADED
+  auto* runManager = G4RunManagerFactory::CreateRunManager(G4RunManagerType::MT);
+  auto* mt = dynamic_cast<G4MTRunManager*>(runManager);
+  const int threads = requestedThreads(argc, argv);
+  if (mt != nullptr) mt->SetNumberOfThreads(threads);
+  std::cout << "WarpTrack Geant4 worker threads: " << threads << '\n';
+#else
+  auto* runManager = G4RunManagerFactory::CreateRunManager(G4RunManagerType::Serial);
+  std::cout << "WarpTrack: Geant4 was built without multithreading; using serial mode.\n";
+#endif
+
+  runManager->SetUserInitialization(new DetectorConstruction());
   runManager->SetUserInitialization(new FTFP_BERT());
-
-  // ---------------------------------------------------------
-  // User actions / detector
-  // ---------------------------------------------------------
-  auto *runAction = new RunAction();
-
-  runManager->SetUserInitialization(new DetectorConstruction(runAction));
-
-  runManager->SetUserAction(new PrimaryGeneratorAction(runAction));
-
-  runManager->SetUserAction(new SteppingAction(runAction));
-
-  runManager->SetUserAction(runAction);
-
-  // Initialize detector geometry and physics.
+  runManager->SetUserInitialization(new ActionInitialization());
   runManager->Initialize();
 
-  auto *uiManager = G4UImanager::GetUIpointer();
-
-  // ---------------------------------------------------------
-  // Batch mode
-  //
-  // If a macro file was supplied on the command line:
-  //
-  //   warptrack_sim.exe macros/run.mac
-  //
-  // execute it and exit.
-  // ---------------------------------------------------------
+  auto* uiManager = G4UImanager::GetUIpointer();
   if (argc > 1) {
-    const G4String command = "/control/execute ";
-    const G4String macroFile = argv[1];
-
-    uiManager->ApplyCommand(command + macroFile);
-  }
-
-  // ---------------------------------------------------------
-  // Interactive visualization mode
-  //
-  // If no macro was supplied, start the Geant4 UI and execute
-  // our visualization macro.
-  // ---------------------------------------------------------
-  else {
-    auto *visManager = new G4VisExecutive();
+    uiManager->ApplyCommand(G4String("/control/execute ") + argv[1]);
+  } else {
+    auto* visManager = new G4VisExecutive();
     visManager->Initialize();
-
-    auto *ui = new G4UIExecutive(argc, argv);
-
+    auto* ui = new G4UIExecutive(argc, argv);
     uiManager->ApplyCommand("/control/execute macros/vis.mac");
-
     ui->SessionStart();
-
     delete ui;
     delete visManager;
   }
 
-  // The run manager owns the Geant4 objects registered with it.
   delete runManager;
-
   return 0;
 }

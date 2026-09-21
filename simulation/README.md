@@ -1,20 +1,10 @@
 # WarpTrack Geant4 simulation
 
-First Geant4 milestone: reproduce the current three-hodoscope triangular
-scintillator geometry, fire a single 4 GeV downward muon, and record Geant4
-energy-deposition steps.
+WarpTrack's Geant4 application is the production simulation stage for the detector-ML pipeline. It supports CRY cosmic-ray showers, controlled particle sources, configurable rack servers, multithreaded event generation, and merged ROOT output.
 
-`warptrack.root` is a CERN ROOT file containing a `TTree` named `hits`. It records event/channel/hodoscope/layer/bar IDs, Geant4
-track and parent IDs, PDG code, deposited energy (MeV), global time (ns), and
-step midpoint position (mm).
+The current geometry contains three 2U hodoscopes centered at rack U=4, 14, and 27. Each hodoscope contains 25 sensitive triangular scintillator pieces: 16 in the bottom layer and 9 in the perpendicular top layer. The nominal geometry comes from `geometry/detector_geometry.json`; Geant4 applies a 1 micrometre inset to the sensitive scintillator faces.
 
-Entries are currently individual Geant4 steps with nonzero deposited energy.
-That deliberately preserves truth detail. We can aggregate them into
-per-channel detector hits in the next stage.
-
-The geometry mirrors the current Python placeholders: hodoscopes at U=4,14,27,
-16 bottom bars, 9 top bars, perpendicular touching layers, tessellated
-triangular cross-sections, no wrapping, and no server material yet.
+The simulation writes three ROOT trees: `hits`, `primaries`, and `track_end`. Step-level detector truth is deliberately preserved in `hits`; downstream Python reconstruction aggregates all deposits in each physical bar without using track ancestry or particle identity as detector inputs.
 
 ## Build
 
@@ -29,7 +19,7 @@ cmake --build build --config Release
 Run ten events:
 
 ```powershell
-.\build\Release\warptrack_sim.exe .\build\macros\run.mac
+.\build\Release\warptrack_sim.exe .\macros\run.mac
 ```
 
 Run interactively:
@@ -39,15 +29,6 @@ Run interactively:
 ```
 
 The executable location can differ for single-config generators.
-
-## Next
-
-1. Visually verify the Geant4 geometry.
-2. Aggregate steps into per-channel energy/time.
-3. Add configurable server/passive material.
-4. Preserve secondary-particle truth.
-5. Integrate CRY.
-6. Convert events to WarpTrack/PyTorch tensors.
 
 
 ## ROOT dependency
@@ -73,6 +54,17 @@ hits->Scan("event_id:channel_id:pdg:edep_MeV:time_ns");
 
 Python/uproot can read the same file directly later when we build the
 Geant4-to-PyTorch data pipeline.
+
+
+### Current ROOT trees
+
+The current simulation writes:
+
+- `hits`: nonzero scintillator energy-deposition steps and detector/channel identity.
+- `primaries`: generated CRY/gun primary truth.
+- `track_end`: terminal track state and stopping/server truth.
+
+Downstream detector reconstruction uses the detector response from `hits`; primary/track truth is retained for labels, validation, and efficiency studies rather than being exposed as ML input.
 
 ## CRY cosmic-ray source
 
@@ -103,7 +95,7 @@ Remove-Item Env:WARPTRACK_SOURCE -ErrorAction SilentlyContinue
 Run CRY in batch:
 
 ```powershell
-.\build\Release\warptrack_sim.exe .\build\macros\run.mac
+.\build\Release\warptrack_sim.exe .\macros\run.mac
 ```
 
 Use the deterministic legacy particle gun when debugging geometry:
@@ -122,9 +114,9 @@ Batch macros do not start the Geant4 visualizer. Examples copied beside the
 executable at build time are:
 
 ```powershell
-.\build\Release\warptrack_sim.exe .\build\Release\macros\quick.mac
-.\build\Release\warptrack_sim.exe .\build\Release\macros\validation.mac
-.\build\Release\warptrack_sim.exe .\build\Release\macros\muons_only.mac
+.\build\Release\warptrack_sim.exe .\macros\quick.mac
+.\build\Release\warptrack_sim.exe .\macros\validation.mac
+.\build\Release\warptrack_sim.exe .\macros\muons_only.mac
 ```
 
 On Visual Studio generators the macros are under `build\Release\macros`.
@@ -156,7 +148,7 @@ CRY can now be configured from a Geant4 macro before `/run/beamOn`:
 /warptrack/cry/zoffset 0
 /warptrack/cry/verbose 0
 /warptrack/cry/apply
-/run/beamOn 10000
+/run/beamOn 1000000
 ```
 
 `/warptrack/cry/apply` rebuilds the CRY generator from the preceding settings,
@@ -197,3 +189,79 @@ Before a production CRY run, a geometry/navigation smoke test can be run with:
 
 Treat any `GeomSolids1001`, `GeomVol1002`, or `GeomNav1002` message as a failed
 geometry validation.
+
+## Multithreaded production
+
+WarpTrack uses Geant4 MT automatically when the Geant4 installation supports it. The optional second argument sets worker count:
+
+```powershell
+.\build\Release\warptrack_sim.exe .\macros\run.mac 16
+```
+
+If omitted, WarpTrack uses one fewer than the reported hardware thread count. `WARPTRACK_THREADS` can also set the worker count. Output ntuples are merged into `warptrack.root` by Geant4's analysis manager.
+
+### v0.1.0 production validation
+
+The first tagged production dataset was generated with the multithreaded CRY path and contains:
+
+```text
+Generated events:          1000000
+Primary particles:         1028381
+Single-primary events:     978589
+Multi-primary events:      21411
+Detector-active events:    100168
+Detector-active fraction:  10.02%
+Triggered events:          53948
+Trigger fraction:          5.39%
+```
+
+The v1 trigger requires at least four distinct physical scintillator bars with at least 0.5 MeV summed deposited energy per bar. The production sample contains 3,300 triggered events whose primary stopping truth is `stopped_in_server=1`.
+
+The production ROOT file was also checked for event-ID integrity: the `primaries` tree contains all event IDs from 0 through 999999 with no missing generated events. Production consumers must key records by `event_id`; row order is not assumed to be deterministic under multithreaded output.
+
+From the repository root, reproduce the dataset summary with:
+
+```powershell
+python -m data.summarize_dataset simulation\warptrack.root
+```
+
+The corresponding v0.1.0 PyTorch baseline and held-out metrics are documented in the repository-level `README.md`.
+
+
+## Reproducing the v0.1.0 production simulation
+
+From a fresh checkout of the tagged repository:
+
+```powershell
+git checkout v0.1.0
+powershell -ExecutionPolicy Bypass -File .\scripts\install_cry.ps1
+cd simulation
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DGeant4_DIR="E:\Geant4\Geant4-11.4\lib\cmake\Geant4" -DROOT_DIR="E:\root_v6.40.02\cmake"
+cmake --build build --config Release
+$env:GEANT4_DATA_DIR="E:\Geant4\Geant4-11.4\share\Geant4\data"
+.\build\Release\warptrack_sim.exe .\macros\geometry_check.mac
+.\build\Release\warptrack_sim.exe .\macros\run.mac 16
+cd ..
+python -m data.summarize_dataset simulation\warptrack.root
+```
+
+The production run should contain 1,000,000 generated events. For the tagged baseline, the summary reports 1,028,381 primary particles, 100,168 detector-active events, and 53,948 triggered events.
+
+Check global event IDs explicitly:
+
+```powershell
+python -c "import uproot,numpy as np; f=uproot.open(r'simulation\warptrack.root'); x=f['primaries']['event_id'].array(library='np'); u=np.unique(x); print('rows:',len(x)); print('unique events:',len(u)); print('min/max:',u.min(),u.max()); print('missing:',1000000-len(u)); print('expected IDs:',np.array_equal(u,np.arange(1000000)))"
+```
+
+Expected v0.1.0 integrity result:
+
+```text
+rows: 1028381
+unique events: 1000000
+min/max: 0 999999
+missing: 0
+expected IDs: True
+```
+
+For the complete reconstruction, CUDA-extension, training, and held-out evaluation procedure, see the repository-level `README.md`.
+

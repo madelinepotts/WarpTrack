@@ -274,28 +274,47 @@ class RootEventDataset(Dataset):
                 library="np",
             )
 
+        # For triggered-only ML training, determine the selected event IDs in
+        # bulk before building Python row maps. This avoids iterating over a
+        # million generated CRY events during dataset construction.
+        if self.triggered_only:
+            if len(hits["event_id"]):
+                max_channel = int(np.max(hits["channel_id"])) + 1
+                composite = (
+                    hits["event_id"].astype(np.int64) * max_channel
+                    + hits["channel_id"].astype(np.int64)
+                )
+                unique_key, inverse = np.unique(composite, return_inverse=True)
+                bar_event = unique_key // max_channel
+                bar_energy = np.bincount(inverse, weights=hits["edep_MeV"])
+                passing_bar_event = bar_event[bar_energy >= BAR_TRIGGER_THRESHOLD_MEV]
+                event_values, passing_counts = np.unique(passing_bar_event, return_counts=True)
+                selected = event_values[passing_counts >= MIN_TRIGGER_BARS].astype(np.int64)
+            else:
+                selected = np.empty(0, dtype=np.int64)
+
+            selected_set = set(int(v) for v in selected)
+            hit_keep = np.isin(hits["event_id"], selected)
+            primary_keep = np.isin(primaries["event_id"], selected)
+            track_keep = np.isin(track_end["event_id"], selected)
+            hits = {name: values[hit_keep] for name, values in hits.items()}
+            primaries = {name: values[primary_keep] for name, values in primaries.items()}
+            track_end = {name: values[track_keep] for name, values in track_end.items()}
+            event_ids = selected_set
+        else:
+            event_ids = set(int(v) for v in primaries["event_id"])
+            event_ids.update(int(v) for v in track_end["event_id"])
+            if include_events_without_hits:
+                event_ids.update(int(v) for v in hits["event_id"])
+            else:
+                event_ids.intersection_update(int(v) for v in hits["event_id"])
+
         self._hits = hits
         self._primaries = primaries
         self._track_end = track_end
-
-        event_ids = set(int(v) for v in primaries["event_id"])
-        event_ids.update(int(v) for v in track_end["event_id"])
-        if include_events_without_hits:
-            event_ids.update(int(v) for v in hits["event_id"])
-        else:
-            event_ids.intersection_update(int(v) for v in hits["event_id"])
         self._hit_rows = self._group_rows(hits["event_id"])
         self._primary_rows = self._group_rows(primaries["event_id"])
         self._track_rows = self._group_rows(track_end["event_id"])
-
-        if self.triggered_only:
-            event_ids = {
-                event_id for event_id in event_ids
-                if event_passes_trigger(
-                    hits["channel_id"][self._hit_rows.get(event_id, np.empty(0, dtype=np.int64))],
-                    hits["edep_MeV"][self._hit_rows.get(event_id, np.empty(0, dtype=np.int64))],
-                )
-            }
         self.event_ids = tuple(sorted(event_ids))
 
         # Grouped row maps above are intentionally retained for all ROOT events;

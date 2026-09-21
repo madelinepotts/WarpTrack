@@ -5,15 +5,13 @@
 #include <vector>
 
 class G4LogicalVolume;
-class RunAction;
 
 class DetectorConstruction : public G4VUserDetectorConstruction {
 public:
-  explicit DetectorConstruction(RunAction *r);
+  DetectorConstruction() = default;
   G4VPhysicalVolume *Construct() override;
   void ConstructSDandField() override;
 
 private:
-  RunAction *runAction_;
   std::vector<G4LogicalVolume *> scintillatorLVs_;
 };
