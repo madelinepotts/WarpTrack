@@ -22,11 +22,13 @@ public:
 private:
     void GenerateGunEvent(G4Event* event);
     void GenerateCRYEvent(G4Event* event);
+    void GenerateSampleEvent(G4Event* event);
     void InitializeCRY();
     void ConfigureMessenger();
     void ApplyCRYConfiguration();
     void SetSource(const G4String& source);
     void SetCRYDate(const G4String& date);
+    void SetSampleParticle(const G4String& particle);
     std::string BuildCRYSetupText() const;
 
     RunAction* runAction_ = nullptr;
@@ -35,9 +37,19 @@ private:
     std::unique_ptr<CRYGenerator> cryGenerator_;
     std::unique_ptr<G4GenericMessenger> primaryMessenger_;
     std::unique_ptr<G4GenericMessenger> cryMessenger_;
+    std::unique_ptr<G4GenericMessenger> sampleMessenger_;
 
     std::string sourceMode_;
     double generationZ_;
+
+    // Controlled randomized single-primary source for balanced ML samples.
+    G4String sampleParticle_ = "mu-";
+    G4double sampleMinEnergy_ = 30.0;  // MeV
+    G4double sampleMaxEnergy_ = 10000.0;  // MeV
+    G4double sampleHalfWidthX_ = 200.0;  // mm
+    G4double sampleHalfWidthY_ = 400.0;  // mm
+    G4double sampleMaxTheta_ = 30.0;  // deg
+    G4int sampleLogEnergy_ = 1;
 
     // Macro-configurable CRY overrides.  They mirror CRYSetup parameters.
     G4int returnNeutrons_ = 1;

@@ -15,32 +15,57 @@ import torch
 from torch.utils.data import Dataset
 
 
-MUON_CLASS = 0
-PROTON_CLASS = 1
-NEUTRON_CLASS = 2
+PARTICLE_CLASSES = {
+    "muon": 0,
+    "electron": 1,
+    "photon": 2,
+    "proton": 3,
+    "neutron": 4,
+}
+PARTICLE_CLASS_NAMES = {value: key for key, value in PARTICLE_CLASSES.items()}
+
+MUON_CLASS = PARTICLE_CLASSES["muon"]
+ELECTRON_CLASS = PARTICLE_CLASSES["electron"]
+PHOTON_CLASS = PARTICLE_CLASSES["photon"]
+PROTON_CLASS = PARTICLE_CLASSES["proton"]
+NEUTRON_CLASS = PARTICLE_CLASSES["neutron"]
 UNKNOWN_PARTICLE_CLASS = -1
+
+# Current v1 detector trigger. A physical bar contributes to the trigger only
+# after all Geant4 deposits in that bar have been summed for the event.
+MIN_TRIGGER_BARS = 4
+BAR_TRIGGER_THRESHOLD_MEV = 0.5
+
+
+def pdg_family(pdg: int):
+    """Map a supported CRY primary PDG code to its particle family."""
+    pdg = int(pdg)
+    if abs(pdg) == 13:
+        return "muon"
+    if abs(pdg) == 11:
+        return "electron"
+    if pdg == 22:
+        return "photon"
+    if pdg == 2212:
+        return "proton"
+    if pdg == 2112:
+        return "neutron"
+    return None
 
 
 def particle_class_from_pdgs(primary_pdgs) -> int:
-    """Return the supervised muon/proton/neutron class for an unambiguous event.
+    """Return one family label when every primary belongs to that family.
 
-    The particle classifier is intentionally trained only on events with one
-    generated primary.  A CRY shower can contain several primary particles, so
-    assigning the whole shower the species of its first row would create a
-    misleading target.  Such events receive UNKNOWN_PARTICLE_CLASS and can be
-    excluded from the particle-classification loss while still being used for
-    other tasks.
+    CRY showers may contain multiple correlated primaries.  Same-family
+    showers such as ``[13, -13]`` or ``[22, 22]`` remain valid supervised
+    examples. Mixed-family or unsupported showers receive -1 so their
+    particle-classification loss can be masked while retaining them for other
+    tasks such as stopping classification.
     """
-    pdgs = tuple(int(pdg) for pdg in primary_pdgs)
-    if len(pdgs) != 1:
+    families = {pdg_family(pdg) for pdg in primary_pdgs}
+    if len(families) != 1 or None in families:
         return UNKNOWN_PARTICLE_CLASS
-    if abs(pdgs[0]) == 13:
-        return MUON_CLASS
-    if pdgs[0] == 2212:
-        return PROTON_CLASS
-    if pdgs[0] == 2112:
-        return NEUTRON_CLASS
-    return UNKNOWN_PARTICLE_CLASS
+    return PARTICLE_CLASSES[next(iter(families))]
 
 
 def channel_count_from_geometry(path: str | Path) -> int:
@@ -84,6 +109,36 @@ def aggregate_hits(channel_ids, edep_mev, time_ns, n_channels: int):
         time[channel] = float(np.min(time_ns[selected]) - event_t0)
         hit[channel] = True
     return edep, time, hit
+
+
+def trigger_bar_count(
+    channel_ids, edep_mev, *, threshold_mev: float = BAR_TRIGGER_THRESHOLD_MEV
+) -> int:
+    """Count distinct physical bars whose summed event energy passes threshold."""
+    channel_ids = np.asarray(channel_ids, dtype=np.int64)
+    edep_mev = np.asarray(edep_mev, dtype=np.float64)
+    if channel_ids.size == 0:
+        return 0
+    if channel_ids.shape != edep_mev.shape:
+        raise ValueError("channel_ids and edep_mev must have the same shape")
+
+    channels, inverse = np.unique(channel_ids, return_inverse=True)
+    summed = np.zeros(len(channels), dtype=np.float64)
+    np.add.at(summed, inverse, edep_mev)
+    return int(np.count_nonzero(summed >= float(threshold_mev)))
+
+
+def event_passes_trigger(
+    channel_ids,
+    edep_mev,
+    *,
+    min_bars: int = MIN_TRIGGER_BARS,
+    threshold_mev: float = BAR_TRIGGER_THRESHOLD_MEV,
+) -> bool:
+    """Return the v1 detector trigger decision from detector observables only."""
+    return trigger_bar_count(
+        channel_ids, edep_mev, threshold_mev=threshold_mev
+    ) >= int(min_bars)
 
 
 def reconstruct_bar_hits(
@@ -157,12 +212,17 @@ class RootEventDataset(Dataset):
     detector identities. With ``randomize_positions=False`` (default), smearing
     is deterministic per event; training can set it True for fresh augmentation.
 
+    The v1 trigger requires at least 4 distinct bars with summed deposited
+    energy >= 0.5 MeV per bar. The trigger decision does not remove lower-energy
+    bars from a triggered event. Set ``triggered_only=True`` to expose only
+    triggered events (e.g. for ML training).
+
     Training truth is deliberately separate from those inputs. The dataset
     exposes two supervised targets: stopped_in_server and particle_class
-    (muon=0, proton=1, neutron=2). PDG, stopping position/material/process, and server
-    identity are never folded into the detector tensors. Multi-primary CRY
-    showers receive particle_class=-1 because a single species label would be
-    ambiguous; particle_class_valid marks events usable for that loss.
+    (muon=0, electron=1, photon=2, proton=3, neutron=4). PDG, stopping position/material/process, and server
+    identity are never folded into the detector tensors. Same-family multi-primary
+    CRY showers retain a valid family label; mixed-family or unsupported showers
+    receive particle_class=-1. particle_class_valid marks events usable for that loss.
     """
 
     def __init__(
@@ -171,6 +231,7 @@ class RootEventDataset(Dataset):
         geometry_file: str | Path,
         *,
         include_events_without_hits: bool = True,
+        triggered_only: bool = False,
         position_resolution_mm: float = 10.0,
         reconstruction_seed: int = 12345,
         randomize_positions: bool = False,
@@ -189,6 +250,7 @@ class RootEventDataset(Dataset):
         self.position_resolution_mm = float(position_resolution_mm)
         self.reconstruction_seed = int(reconstruction_seed)
         self.randomize_positions = bool(randomize_positions)
+        self.triggered_only = bool(triggered_only)
         self._augmentation_rng = np.random.default_rng() if self.randomize_positions else None
 
         with uproot.open(self.root_file) as root:
@@ -222,11 +284,22 @@ class RootEventDataset(Dataset):
             event_ids.update(int(v) for v in hits["event_id"])
         else:
             event_ids.intersection_update(int(v) for v in hits["event_id"])
-        self.event_ids = tuple(sorted(event_ids))
-
         self._hit_rows = self._group_rows(hits["event_id"])
         self._primary_rows = self._group_rows(primaries["event_id"])
         self._track_rows = self._group_rows(track_end["event_id"])
+
+        if self.triggered_only:
+            event_ids = {
+                event_id for event_id in event_ids
+                if event_passes_trigger(
+                    hits["channel_id"][self._hit_rows.get(event_id, np.empty(0, dtype=np.int64))],
+                    hits["edep_MeV"][self._hit_rows.get(event_id, np.empty(0, dtype=np.int64))],
+                )
+            }
+        self.event_ids = tuple(sorted(event_ids))
+
+        # Grouped row maps above are intentionally retained for all ROOT events;
+        # event_ids controls which events are exposed by this dataset instance.
 
     @staticmethod
     def _group_rows(event_ids):
@@ -254,6 +327,12 @@ class RootEventDataset(Dataset):
             if self.randomize_positions
             else np.random.default_rng(self.reconstruction_seed + int(event_id))
         )
+        trigger_count = trigger_bar_count(
+            self._hits["channel_id"][hit_rows],
+            self._hits["edep_MeV"][hit_rows],
+        )
+        triggered = trigger_count >= MIN_TRIGGER_BARS
+
         bar_hits, bar_hit_channels = reconstruct_bar_hits(
             self._hits["channel_id"][hit_rows],
             self._hits["edep_MeV"][hit_rows],
@@ -318,6 +397,10 @@ class RootEventDataset(Dataset):
             "bar_hodoscopes": torch.from_numpy(bar_hodoscopes.copy()),
             "bar_layers": torch.from_numpy(bar_layers.copy()),
             "bar_ids": torch.from_numpy(bar_ids.copy()),
+            # Trigger decision is detector-derived: >=4 distinct bars with
+            # summed Edep >=0.5 MeV. Sub-threshold bars remain in the event.
+            "triggered": torch.tensor(triggered),
+            "trigger_bar_count": trigger_count,
             # Multi-task training targets.  ``label`` is retained as a
             # backwards-compatible alias for the stopping target.
             "label": torch.tensor(int(stopped_in_server), dtype=torch.long),

@@ -1,0 +1,10 @@
+# Balanced ML-development sample: single protons.
+/warptrack/source sample
+/warptrack/sample/particle proton
+/warptrack/sample/minEnergy 50 MeV
+/warptrack/sample/maxEnergy 10 GeV
+/warptrack/sample/halfWidthX 200 mm
+/warptrack/sample/halfWidthY 400 mm
+/warptrack/sample/maxTheta 30 deg
+/warptrack/sample/logEnergy 1
+/run/beamOn 10000

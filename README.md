@@ -1,570 +1,398 @@
 # WarpTrack
 
-WarpTrack is a CUDA-accelerated PyTorch project for distinguishing **muon-like tracks** from **hadronic cosmic-ray shower events** using hit patterns from segmented scintillator detectors.
+WarpTrack is a CUDA + PyTorch detector-ML project for reconstructing and classifying cosmic-ray events in a segmented scintillator hodoscope stack. The current primary simulation path is **CRY → Geant4 → ROOT → detector-level reconstruction → PyTorch**. Controlled single-particle sources remain available for validation and response studies.
 
-The long-term goal is to train and validate the model on simulated events, then use the same event representation and inference pipeline on real detector data.
+The project is designed around one rule: **if the real detector cannot know it, it is not an ML input**. Geant4/CRY truth is retained for labels, validation, and efficiency studies but is kept separate from detector observables.
 
-## Scope
+## Current ML tasks
 
-WarpTrack focuses on one binary classification problem:
+WarpTrack currently exposes two supervised targets:
+
+1. **Particle-family classification** for unambiguous CRY showers.
+2. **Stopping classification**: whether a generated primary stopped inside a configured server volume.
+
+Particle-family IDs are:
 
 ```text
-Muon-like event
-        vs
-Hadronic shower-like event
+0 = muon      (PDG ±13)
+1 = electron  (PDG ±11)
+2 = photon    (PDG 22)
+3 = proton    (PDG 2212)
+4 = neutron   (PDG 2112)
+-1 = mixed / unsupported
 ```
 
-Each event is represented as a variable collection of detector hits.
+A multi-primary CRY shower remains a valid particle-family example when every primary belongs to the same family, e.g. `(-13, 13)` is muon and `(22, 22)` is photon. Mixed-family showers receive `particle_class=-1` and `particle_class_valid=False`; they can still be used for the stopping task.
 
-A hit may contain:
+## Detector geometry
 
-```text
-x
-y
-z
-energy deposition
-time
-module identifier
-layer identifier
+The canonical geometry is `geometry/detector_geometry.json`. Both Python and Geant4 consume this shared definition; `geometry/generate_cpp_geometry.py` generates the C++ geometry header used by the simulation.
+
+The current stack contains three hodoscopes at rack-U centers 4, 14, and 27. Each hodoscope is 2U high and has exactly **25 sensitive triangular scintillator pieces**:
+
+- bottom layer: 16 pieces = left half + 14 full + right half
+- top layer: 9 pieces = left half + 7 full + right half
+- bottom local channels: 0–15
+- top local channels: 16–24
+- global channel: `hodoscope_id * 25 + local_channel`
+
+The three current hodoscopes therefore occupy channels 0–74. The edge half-triangles replace the edge full triangles; they are not extra channels. Geant4 insets sensitive scintillator faces by 1 µm, leaving the surrounding world air as the thin inter-volume wrapping.
+
+## Configurable rack servers
+
+Servers are configured in the same geometry JSON. The simulation supports generic 1U/2U server types with a thin metal chassis and a lower-density effective electronics interior. Empty rack slots remain air.
+
+The supplied effective electronics material is an aggregate approximation rather than a vendor-specific server model. Track-end truth records both the endpoint material and the actual server object containing the endpoint, keeping geometry identity separate from material identity.
+
+## Simulation sources
+
+### CRY: primary production source
+
+CRY is the default source for realistic ML data. One CRY shower is one Geant4 event, preserving correlated primaries. CRY primary rows record PDG, kinetic energy, time, position, and direction.
+
+Install CRY once from the repository root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_cry.ps1
 ```
 
-The starter project currently uses:
+The default batch macro is `simulation/macros/run.mac`:
 
 ```text
-x, y, z, energy
+/warptrack/source cry
+/warptrack/cry/verbose 0
+/warptrack/cry/apply
+/run/beamOn 10000
 ```
 
-The remaining fields are reserved for later integration with real data.
+`/warptrack/cry/apply` must appear after CRY configuration changes and before `/run/beamOn`.
 
-## Why this problem?
+### Controlled particle gun
 
-Muon-like events usually produce a relatively coherent, track-like pattern through multiple detector elements.
+The deterministic gun and stopping macros are retained for geometry/physics validation, including `muon_stop.mac`, `proton_stop.mac`, and `neutron_test.mac`.
 
-Hadronic cosmic-ray showers can produce:
+### Randomized single-primary sample source
 
-- larger hit multiplicity
-- multiple localized clusters
-- wider spatial spread
-- secondary-particle branches
-- less globally track-like geometry
+`/warptrack/source sample` provides controlled randomized muon/proton/neutron samples. This is useful for detector-response studies and ML debugging, but CRY is the main realistic data source.
 
-These differences make event topology and local hit relationships useful classification features.
-
-## Design philosophy
-
-The project is intentionally split into two parts:
-
-1. **PyTorch**
-   - data loading
-   - model definition
-   - training
-   - validation
-   - inference
-
-2. **Custom CUDA**
-   - geometric operations on detector hits
-   - pairwise distances
-   - later radius-neighbor construction
-   - later graph aggregation
-
-The first CUDA kernel computes pairwise squared distances between hits.
-
-This is not intended to be the final representation. It is the first step toward a CUDA-accelerated graph/point-cloud classifier.
-
-## Current pipeline
+Current sample macros use broad development ranges:
 
 ```text
-Synthetic detector event
-        |
-        v
-Hit tensor [B, N, 4]
-(x, y, z, energy)
-        |
-        +----------------------+
-        |                      |
-        v                      v
- xyz positions             hit features
-        |                      |
-        v                      |
-Custom CUDA pairwise           |
-distance calculation           |
-        |                      |
-        +----------+-----------+
-                   |
-                   v
-             PyTorch model
-                   |
-                   v
-          Muon / Hadronic Shower
+muon:     30 MeV – 10 GeV
+proton:   50 MeV – 10 GeV
+neutron:   1 MeV – 10 GeV
+```
+
+Run all three with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_training_samples.ps1 -EventsPerSpecies 100
+```
+
+## Build Geant4/ROOT simulation on Windows
+
+Known development configuration:
+
+- Windows 10
+- Visual Studio 2022 Build Tools / MSVC
+- Geant4 11.4.x
+- ROOT 6.40.x
+- CUDA 13.3 for the PyTorch extension
+
+From `simulation`:
+
+```powershell
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DGeant4_DIR="E:\Geant4\Geant4-11.4\lib\cmake\Geant4" -DROOT_DIR="E:\root_v6.40.02\cmake"
+cmake --build build --config Release
+```
+
+If Geant4 data variables are not already configured:
+
+```powershell
+$env:GEANT4_DATA_DIR="E:\Geant4\Geant4-11.4\share\Geant4\data"
+```
+
+Run the CRY batch simulation:
+
+```powershell
+.\build\Release\warptrack_sim.exe .\macros\run.mac
+```
+
+The default ROOT output is `simulation/warptrack.root`.
+
+Before a production run, the geometry/navigation smoke test is:
+
+```powershell
+.\build\Release\warptrack_sim.exe .\macros\geometry_check.mac
+```
+
+Treat Geant4 geometry/navigation overlap errors as a failed validation.
+
+## ROOT output
+
+The simulation writes three TTrees.
+
+### `hits`
+
+Step-level nonzero scintillator energy deposits. Important branches include:
+
+```text
+event_id, channel_id, hodoscope_id, layer_id, bar_id
+track_id, parent_id, pdg
+edep_MeV, time_ns
+x_mm, y_mm, z_mm
+```
+
+These rows preserve detailed Geant4 truth. **ML reconstruction aggregates all deposits in a physical bar regardless of track ID, parent ID, or PDG.** A real scintillator does not know which track produced a deposit.
+
+### `primaries`
+
+Generated CRY/gun primary truth:
+
+```text
+event_id, primary_index, pdg, kinetic_energy_MeV
+time_s, x_m, y_m, z_m, dir_x, dir_y, dir_z
+```
+
+### `track_end`
+
+Terminal track truth includes endpoint energy/position/time/process plus stopping metadata such as:
+
+```text
+stopped
+stopped_between_hodoscopes
+stopped_in_server
+stop_region
+stop_hodoscope_id
+gap_upper_hodoscope_id
+gap_lower_hodoscope_id
+stop_material
+stop_server_id
+stop_server_type
+end_process
+```
+
+`stopped_in_server` is based on the actual terminal point lying inside a configured server object; it is not inferred from missing downstream detector activity or from the material name alone.
+
+## Detector-level reconstruction
+
+`data/root_dataset.py` converts ROOT events into detector observables and separately exposes simulation truth.
+
+### Fixed per-channel observables
+
+```python
+event["edep"]   # total deposited energy per channel
+event["time"]   # earliest channel time relative to event first hit
+event["hit"]    # fired-channel mask
+```
+
+### Reconstructed bar signals
+
+Each physical bar appears once per event, even when its Geant4 steps are non-contiguous in the ROOT tree.
+
+```python
+event["bar_hits"]        # [x_mm, y_mm, z_mm, total_Edep_MeV, relative_time_ns]
+event["bar_channels"]
+event["bar_hodoscopes"]
+event["bar_layers"]
+event["bar_ids"]
+```
+
+Bar energy is the exact sum of all Geant4 energy deposits in that bar:
+
+```text
+E_bar = sum(E_i)
+```
+
+The unsmeared position is the energy-weighted deposition centroid. To approximate dual-ended SiPM position reconstruction without simulating optical photons/electronics, XYZ is smeared with a default **10 mm Gaussian resolution**. Energy is not smeared by this position-response model.
+
+Validation/test reconstruction is deterministic per event by default:
+
+```python
+RootEventDataset(..., position_resolution_mm=10.0,
+                 randomize_positions=False, reconstruction_seed=12345)
+```
+
+Training can request fresh position smearing as augmentation:
+
+```python
+RootEventDataset(..., position_resolution_mm=10.0,
+                 randomize_positions=True)
+```
+
+### Truth and targets
+
+```python
+event["particle_class"]
+event["particle_class_valid"]
+event["stopped_in_server"]
+event["primary_pdg"]
+event["primary_pdgs"]
+event["primary_energy_MeV"]
+event["primary_energies_MeV"]
+event["primary_count"]
+event["stopped_between_hodoscopes"]
+```
+
+Primary PDGs, track ancestry, exact Geant4 endpoint information, materials, and server IDs are **truth/metadata and must not be fed into the model input**.
+
+### Current v1 trigger
+
+The current detector trigger is defined entirely from detector-observable scintillator energy:
+
+```text
+1. Sum every Geant4 energy deposit in each physical bar for the event.
+2. A bar contributes to the trigger when E_bar >= 0.5 MeV.
+3. The event triggers when at least 4 distinct bars pass that threshold.
+```
+
+Equivalently:
+
+```text
+N_bars(E_bar >= 0.5 MeV) >= 4
+```
+
+The threshold is applied **after per-bar aggregation**, so several Geant4 steps in one bar still count as one physical bar. The trigger is only an event-selection decision: once an event triggers, lower-energy/sub-threshold bar signals are retained in the reconstructed event rather than discarded. No timing-coincidence requirement or separate readout threshold is currently modeled.
+
+`RootEventDataset` exposes both the trigger decision and the number of bars that contributed to it:
+
+```python
+event["triggered"]
+event["trigger_bar_count"]
+```
+
+By default the dataset still exposes all generated events for detector-efficiency and physics studies. ML training can select only triggered events directly:
+
+```python
+RootEventDataset(..., triggered_only=True)
+```
+
+The initial CRY threshold scan can be repeated with:
+
+```powershell
+python -m data.check_trigger_thresholds simulation\warptrack.root
+```
+
+For the 10,000-shower development sample, requiring four bars reduced the sample from 639 events at a 0 MeV/bar threshold to 542 events at 0.5 MeV/bar. Over the same change, muon events changed from 456 to 418 and photon events from 75 to 35. This motivated the current 0.5 MeV/bar development threshold; it remains a simulation assumption that can be revised when hardware trigger information is available.
+
+## Inspect reconstructed events
+
+From the repository root:
+
+```powershell
+python -m data.inspect_dataset --root simulation\warptrack.root --event 0
+```
+
+The inspector prints one row per reconstructed bar signal with particle-family label, stopping target, detector identity, reconstructed XYZ, summed energy, and relative time.
+
+## Summarize a ROOT dataset
+
+```powershell
+python -m data.summarize_dataset simulation\warptrack.root
+```
+
+The CRY-aware summary reports:
+
+- generated events and total primary particles
+- single- vs multi-primary shower counts
+- detector-active fraction
+- valid particle-family counts and mixed/unsupported events
+- particle-family counts among detector-active and triggered events
+- v1 trigger counts and efficiencies (`>=4` bars with `>=0.5 MeV` summed energy per bar)
+- `stopped_in_server` balance for all, detector-active, and triggered events
+- primary multiplicity and energy distributions
+- fired-bar, hodoscope, and layer multiplicities
+- total scintillator energy deposition
+- hit/stop response versus energy for single-primary events
+
+The energy-response section intentionally uses single-primary events only rather than inventing a single energy for a multi-primary CRY shower.
+
+## Simulation validation analysis
+
+A separate simulation-level validation script is available:
+
+```powershell
+python .\analysis\validate_simulation.py .\simulation\warptrack.root
+```
+
+It writes `analysis_output/summary.txt` and diagnostic plots covering primary composition/energy/multiplicity, detector occupancy, deposited energy, coincidences, and species response.
+
+## CUDA/PyTorch extension
+
+WarpTrack also contains a native CUDA extension for geometric operations on detector hits. The current kernel computes pairwise squared distances:
+
+```text
+d_ij^2 = (x_i-x_j)^2 + (y_i-y_j)^2 + (z_i-z_j)^2
+```
+
+Build from the repository root:
+
+```powershell
+python setup.py build_ext --inplace
+```
+
+`setup.py` initializes the Visual Studio x64 compiler environment when needed and runs the unit tests after a successful extension build. The current Windows toolchain uses C++20 and `/Zc:preprocessor` for compatibility with current PyTorch/CUDA headers.
+
+Verify the extension:
+
+```powershell
+python -c "import warptrack_cuda; print('WarpTrack CUDA extension loaded')"
+```
+
+Run tests directly with:
+
+```powershell
+python -m unittest discover tests
 ```
 
 ## Repository layout
 
 ```text
 WarpTrack/
-├── cuda/
-│   ├── bindings.cpp
-│   └── pairwise_distance.cu
-├── data/
-│   ├── __init__.py
-│   └── synthetic.py
-├── models/
-│   ├── __init__.py
-│   └── event_classifier.py
-├── warptrack_cuda/
-│   └── __init__.py
-├── benchmarks/
-│   └── benchmark_pairwise.py
+├── analysis/                 # Geant4/CRY validation analysis
+├── benchmarks/               # CUDA benchmarks
+├── cuda/                     # native CUDA/C++ kernels and bindings
+├── data/                     # ROOT reconstruction + synthetic helpers
+│   ├── root_dataset.py
+│   ├── inspect_dataset.py
+│   └── summarize_dataset.py
+├── geometry/
+│   ├── detector_geometry.json
+│   └── generate_cpp_geometry.py
+├── models/                   # PyTorch models
+├── scripts/
+│   ├── install_cry.ps1
+│   └── run_training_samples.ps1
+├── simulation/               # Geant4 + ROOT + CRY application
+│   ├── macros/
+│   ├── src/
+│   └── include/
 ├── tests/
-│   ├── __init__.py
-│   ├── test_dataset.py
-│   └── test_pairwise.py
-├── inspect_event.py
+├── visualization/
 ├── setup.py
-├── train.py
-└── README.md
+└── train.py
 ```
 
-## Synthetic data
+## Development direction
 
-The starter contains a simplified synthetic event generator.
-
-### Muon-like events
-
-Muon-like events are generated from an approximately straight trajectory with:
-
-- small transverse position fluctuations
-- moderate event-to-event direction variation
-- approximately minimum-ionizing energy deposits
-- occasional missing hits
-
-### Hadronic shower-like events
-
-Hadronic shower-like events contain:
-
-- a primary shower direction
-- increasing spatial spread
-- multiple secondary branches
-- larger variation in deposited energy
-- higher and more variable hit multiplicity
-
-These are not intended to replace Geant4 or another detector simulation.
-
-The synthetic generator exists so that the CUDA and ML infrastructure can be developed before introducing real simulated or measured detector data.
-
-## Variable hit multiplicity
-
-Real detector events do not all contain the same number of hits.
-
-The dataset therefore returns:
+The current detector representation is ready for realistic CRY-driven ML development. The intended path is:
 
 ```text
-hits : [max_hits, 4]
-mask : [max_hits]
-label: scalar
+CRY shower
+    ↓
+Geant4 detector + server simulation
+    ↓
+ROOT step/truth trees
+    ↓
+per-bar detector reconstruction
+    ↓
+trigger/event selection using detector observables
+    ↓
+PyTorch particle-family + stopping model
+    ↓
+CUDA-accelerated neighborhood/point-cloud operations
+    ↓
+real detector data using the same observable representation
 ```
 
-Unused rows are zero padded.
-
-The mask identifies which hits are real.
-
-This makes the data-loader interface compatible with future real events.
-
-## Build requirements
-
-WarpTrack uses a native PyTorch C++/CUDA extension. On Windows, the build requires:
-
-- Python 3.10+
-- NVIDIA GPU
-- CUDA Toolkit
-- CUDA-enabled PyTorch
-- Visual Studio 2022 Build Tools with the C++ toolchain
-- a Windows SDK
-
-The current Windows development environment has been verified with CUDA 13.3 and a CUDA-enabled PyTorch build compiled against CUDA 13.0. PyTorch reports this as a minor CUDA-version mismatch and notes that it should normally be compatible.
-
-Verify PyTorch:
-
-```powershell
-python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.version.cuda)"
-```
-
-Verify CUDA:
-
-```powershell
-where.exe nvcc
-nvcc --version
-```
-
-## Build the CUDA extension
-
-### Windows
-
-`setup.py` automatically initializes the Visual Studio x64 compiler environment when `cl.exe` is not already available. It also sets the PyTorch `DISTUTILS_USE_SDK` requirement internally, so a separate Developer Command Prompt is normally **not required**.
-
-From a normal PowerShell or Command Prompt, first change into the repository root, then build:
-
-```powershell
-cd C:\Users\Maddie\Documents\GitHub\WarpTrack
-python setup.py build_ext --inplace
-```
-
-`setup.py` automatically runs the full unit-test suite after a successful native-extension build. If any unit test fails, the setup command exits with an error instead of reporting a successful setup.
-
-The order matters: `setup.py` and the `tests` directory live in the WarpTrack repository, so run the build only after changing into that directory.
-
-The Windows build uses the flags required by the current PyTorch/CUDA toolchain:
-
-```text
-MSVC: /O2 /std:c++20 /Zc:preprocessor
-NVCC: -O3 -std=c++20 -Xcompiler=/Zc:preprocessor
-```
-
-These settings are intentional:
-
-- **C++20** is required by the current PyTorch C++ headers.
-- **`/Zc:preprocessor`** enables MSVC's standards-conforming preprocessor, required by CUDA 13.3 CCCL headers.
-- **`DISTUTILS_USE_SDK=1`** prevents PyTorch/setuptools from trying to activate an already configured Visual C++ environment a second time.
-
-If automatic Visual Studio discovery ever fails, the known-good manual fallback is:
-
-```powershell
-cmd /k """C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"""
-```
-
-Then, inside that Developer Command Prompt:
-
-```cmd
-cd /d C:\path\to\WarpTrack
-set DISTUTILS_USE_SDK=1
-python setup.py build_ext --inplace
-```
-
-A clean rebuild can be forced with:
-
-```powershell
-Remove-Item -Recurse -Force .\build -ErrorAction SilentlyContinue
-python setup.py build_ext --inplace
-```
-
-or in `cmd.exe`:
-
-```cmd
-rmdir /s /q build
-python setup.py build_ext --inplace
-```
-
-A successful build creates a Python extension module in the repository root with a name similar to:
-
-```text
-warptrack_cuda_ext.cp314-win_amd64.pyd
-```
-
-Verify that it imports:
-
-```powershell
-python -c "import warptrack_cuda; print('WarpTrack CUDA extension loaded')"
-```
-
-## Run tests
-
-The tests run automatically at the end of:
-
-```powershell
-python setup.py build_ext --inplace
-```
-
-You can also rerun them manually without rebuilding the extension:
-
-```powershell
-python -m unittest discover tests
-```
-
-The CUDA unit test compares WarpTrack's custom pairwise-distance kernel against an equivalent PyTorch calculation. A build is not considered validated until the automatic test step passes.
-
-## Inspect synthetic events
-
-```bash
-python inspect_event.py
-```
-
-This prints one muon-like and one hadronic shower-like event.
-
-## Train
-
-```bash
-python train.py
-```
-
-The starter model uses:
-
-- per-hit features
-- masked global pooling
-- summary statistics from the CUDA distance matrix
-
-This is deliberately more permutation-tolerant than treating the distance matrix as an image.
-
-The final model architecture is expected to evolve into a graph or point-cloud network.
-
-## First CUDA kernel
-
-For hits `i` and `j`,
-
-\[
-d_{ij}^2 =
-(x_i-x_j)^2 +
-(y_i-y_j)^2 +
-(z_i-z_j)^2
-\]
-
-The CUDA extension receives a tensor with shape:
-
-```text
-[B, N, 3]
-```
-
-and returns:
-
-```text
-[B, N, N]
-```
-
-The mask is handled separately by PyTorch.
-
-## Development roadmap
-
-### Stage 1 — Infrastructure
-
-- synthetic event generation
-- padded variable-length batches
-- CUDA/PyTorch extension
-- tests
-- basic classifier
-- benchmark suite
-
-### Stage 2 — CUDA optimization
-
-Benchmark and optimize pairwise geometry calculations using:
-
-- different block sizes
-- shared-memory tiling
-- reduced global-memory traffic
-- improved memory layout
-- CUDA profiling
-
-### Stage 3 — Radius-neighbor kernel
-
-Replace the full `N x N` distance matrix with a sparse local-neighborhood representation.
-
-Instead of storing every pair, retain hits satisfying:
-
-\[
-d_{ij} < r
-\]
-
-or the `k` nearest neighbors.
-
-### Stage 4 — Point-cloud / graph classifier
-
-Represent each hit as a node with features such as:
-
-```text
-x
-y
-z
-energy
-time
-detector metadata
-```
-
-Use CUDA-generated neighborhoods for message passing.
-
-### Stage 5 — Simulation data
-
-Replace the simplified generator with physically simulated detector events.
-
-Candidate sources include detector Monte Carlo outputs produced with tools such as Geant4.
-
-The ML input API should remain largely unchanged.
-
-### Stage 6 — Real detector data
-
-Implement an adapter that converts measured detector events into the same event representation:
-
-```text
-hits
-mask
-event metadata
-```
-
-The trained classifier can then run inference on real events.
-
-## Benchmark goals
-
-We will compare:
-
-```text
-PyTorch implementation
-vs
-naive custom CUDA
-vs
-optimized custom CUDA
-```
-
-for increasing event multiplicity.
-
-Questions we want to answer include:
-
-- At what event size does the custom kernel become worthwhile?
-- Which CUDA block size performs best?
-- How much does shared-memory tiling help?
-- Does full pairwise distance calculation become memory limited?
-- When should we switch to sparse neighbor construction?
-
-## End goal
-
-The final project should look approximately like:
-
-```text
-Detector event
-      |
-      v
-Hit reconstruction / parsing
-      |
-      v
-Point-cloud representation
-      |
-      v
-CUDA neighbor construction
-      |
-      v
-PyTorch graph / point-cloud model
-      |
-      v
-Muon-like
-or
-Hadronic shower-like
-```
-
-This project is intended to demonstrate practical integration of:
-
-- CUDA C++
-- PyTorch
-- Python
-- GPU profiling
-- custom PyTorch extensions
-- particle-detector event processing
-- machine-learning classification
-- simulation-to-real-data model deployment
-
-## Run the tests
-
-After the extension builds successfully, run the complete unit-test suite from the repository root:
-
-```powershell
-python -m unittest discover tests
-```
-
-A normal development cycle is therefore:
-
-```powershell
-cd C:\Users\Maddie\Documents\GitHub\WarpTrack
-python setup.py build_ext --inplace
-python -m unittest discover tests
-```
-
-## Windows build fallback
-
-If automatic Visual Studio discovery ever fails, initialize the same known-good x64 MSVC environment manually:
-
-```powershell
-cmd /k """C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"""
-```
-
-Then, in the Developer Command Prompt:
-
-```cmd
-cd /d C:\Users\Maddie\Documents\GitHub\WarpTrack
-set DISTUTILS_USE_SDK=1
-python setup.py build_ext --inplace
-python -m unittest discover tests
-```
-
-
-## Geometry-aware event display
-
-WarpTrack includes a 3D validation display for the current synthetic cosmic-ray geometry.
-
-Install Matplotlib if it is not already available:
-
-```powershell
-python -m pip install matplotlib
-```
-
-Generate one accepted cosmic-ray event and inspect it:
-
-```powershell
-python view_event.py
-```
-
-The terminal prints the sampled zenith/azimuth and a chronological hit table with
-hodoscope, layer, bar, channel, hit midpoint, path length, and time of flight.
-A Matplotlib 3D window then shows every triangular-prism scintillator, the
-particle trajectory, and the scintillators reported as hits.
-
-The current rack-U positions and exact detector dimensions are still
-configurable placeholders. The event display is intended to make geometry and
-intersection mistakes visually obvious before the synthetic events are used for
-ML training.
-
-
-### Interactive event display and saved snapshot
-
-`python view_event.py` now creates one event, saves that exact event to
-`warptrack_event.png`, and then opens the same Matplotlib 3D figure interactively.
-Drag the 3D view to rotate it and use the Matplotlib toolbar for zoom/pan.
-
-Hit scintillator prisms are highlighted, while the hit midpoint is shown in a
-separate red marker so the geometric crossing point is easy to distinguish.
-
-The scintillator bars are intended to tessellate without physical gaps. If gaps
-are visible in the display, that is a geometry/visualization issue rather than an
-intentional detector feature and should be corrected before using the geometry
-for synthetic training data.
-
-
-### Canonical hodoscope geometry
-
-`data/detector_geometry.py` is the single Python source of truth for detector
-geometry. The top-level `detector_geometry.py` is only a compatibility re-export.
-The event display, track-intersection code, cosmic-ray generator, and tests all
-consume the canonical geometry rather than defining their own bar shapes.
-
-Each hodoscope contains exactly **25 sensitive scintillators**. The bottom layer
-contains 16 total: a left half-triangle (local channel 0), 14 full triangular
-prisms (1-14), and a right half-triangle (15). The top layer contains 9 total: a
-left half-triangle (local channel 16), 7 full triangular prisms (17-23), and a
-right half-triangle (24). The edge halves are included in the 25-channel count;
-they are not additional volumes. Global channel IDs are
-`hodoscope_id * 25 + local_channel`.
-
-The Python cross-section vertices, plotting, and geometric track intersection
-match the shapes and dimensions used by `simulation/src/DetectorConstruction.cc`.
-Neighboring pieces retain the half-base center pitch used by the Geant4 model.
-The thin optical wrapping between real scintillators is intentionally ignored.
-Rack-U positions and absolute detector dimensions remain placeholders until
-measured values are supplied.
-
-
-## Shared detector geometry
-
-`geometry/detector_geometry.json` is now the single source of truth for detector dimensions, hodoscope instances, channel segmentation, and scintillator polygons. Python loads it directly. CMake regenerates a C++ header from the same JSON before building Geant4. Geant4 constructs the triangular prisms as tessellated solids in global-aligned coordinates, eliminating separate layer rotation conventions. To expand the rack or detector, edit the JSON and rebuild.
-
-## Configurable Geant4 server model
-
-`geometry/detector_geometry.json` now describes individual rack servers instead of filling every detector gap with a solid block. Each server has an ID, a center position in rack units (`rack_u`), and a named type. The supplied generic types demonstrate both 1U and 2U hardware; adding or moving servers requires only JSON changes. Empty rack slots remain `G4_AIR`.
-
-Each server is modeled as a 1.5 mm metal chassis containing a homogeneous, lower-density effective electronics volume. The example 1U chassis uses `G4_Al`; the example 2U chassis uses `G4_STAINLESS-STEEL`. The interior density is 0.30 g/cm^3 and its mass fractions are H 4%, C 18%, O 18%, Al 20%, Si 15%, Fe 10%, and Cu 15%. This intentionally represents the aggregate material budget of PCBs, silicon, heat sinks, wiring, power hardware, structural metal, plastics/resins, and internal void space without modeling a particular vendor's server.
-
-The server height is derived from `height_u * rack.rack_unit_height`, so 1U and 2U configurations are physical geometry, not labels. Track-end truth still keeps geometry (`stop_region`, neighboring hodoscope IDs) separate from the Geant4 material name (`stop_material`). A stop in a chassis therefore reports `G4_Al` or `G4_STAINLESS-STEEL`, while a stop in the effective interior reports `WarpTrack_ServerInterior_<type>`.
-
+The current v1 detector trigger is now defined as at least four distinct bars with at least 0.5 MeV summed deposited energy per bar. Near-term work is to generate a larger realistic CRY sample and train/evaluate the multitask model on triggered events without leaking simulation truth into its inputs.

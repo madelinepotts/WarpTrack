@@ -7,13 +7,19 @@ import numpy as np
 
 from data.root_dataset import (
     MUON_CLASS,
+    ELECTRON_CLASS,
+    PHOTON_CLASS,
     PROTON_CLASS,
     NEUTRON_CLASS,
     UNKNOWN_PARTICLE_CLASS,
+    BAR_TRIGGER_THRESHOLD_MEV,
+    MIN_TRIGGER_BARS,
     aggregate_hits,
     channel_count_from_geometry,
+    event_passes_trigger,
     particle_class_from_pdgs,
     reconstruct_bar_hits,
+    trigger_bar_count,
 )
 
 
@@ -98,9 +104,41 @@ class TestRootDatasetHelpers(unittest.TestCase):
         )
         np.testing.assert_array_equal(a, b)
 
+    def test_trigger_requires_four_distinct_bars_at_threshold(self):
+        self.assertEqual(MIN_TRIGGER_BARS, 4)
+        self.assertAlmostEqual(BAR_TRIGGER_THRESHOLD_MEV, 0.5)
+        self.assertTrue(event_passes_trigger(
+            [1, 2, 3, 4], [0.5, 0.5, 0.5, 0.5]
+        ))
+        self.assertFalse(event_passes_trigger(
+            [1, 2, 3], [10.0, 10.0, 10.0]
+        ))
+
+    def test_trigger_sums_steps_before_threshold_and_counts_unique_bars(self):
+        channels = [1, 1, 2, 3, 4, 5]
+        energies = [0.2, 0.3, 0.6, 0.7, 0.5, 0.49]
+        self.assertEqual(trigger_bar_count(channels, energies), 4)
+        self.assertTrue(event_passes_trigger(channels, energies))
+
+    def test_subthreshold_bars_do_not_count_toward_trigger(self):
+        self.assertEqual(
+            trigger_bar_count([1, 2, 3, 4], [0.5, 0.5, 0.5, 0.499]),
+            3,
+        )
+        self.assertFalse(
+            event_passes_trigger([1, 2, 3, 4], [0.5, 0.5, 0.5, 0.499])
+        )
+
     def test_particle_class_maps_both_muon_charges_to_muon(self):
         self.assertEqual(particle_class_from_pdgs([13]), MUON_CLASS)
         self.assertEqual(particle_class_from_pdgs([-13]), MUON_CLASS)
+
+    def test_particle_class_maps_electron_charges(self):
+        self.assertEqual(particle_class_from_pdgs([11]), ELECTRON_CLASS)
+        self.assertEqual(particle_class_from_pdgs([-11]), ELECTRON_CLASS)
+
+    def test_particle_class_maps_photon(self):
+        self.assertEqual(particle_class_from_pdgs([22]), PHOTON_CLASS)
 
     def test_particle_class_maps_proton(self):
         self.assertEqual(particle_class_from_pdgs([2212]), PROTON_CLASS)
@@ -108,9 +146,15 @@ class TestRootDatasetHelpers(unittest.TestCase):
     def test_particle_class_maps_neutron(self):
         self.assertEqual(particle_class_from_pdgs([2112]), NEUTRON_CLASS)
 
-    def test_particle_class_rejects_other_or_ambiguous_events(self):
-        self.assertEqual(particle_class_from_pdgs([11]), UNKNOWN_PARTICLE_CLASS)
+    def test_particle_class_accepts_same_family_multi_primary_showers(self):
+        self.assertEqual(particle_class_from_pdgs([13, -13]), MUON_CLASS)
+        self.assertEqual(particle_class_from_pdgs([22, 22]), PHOTON_CLASS)
+        self.assertEqual(particle_class_from_pdgs([11, -11]), ELECTRON_CLASS)
+
+    def test_particle_class_rejects_mixed_or_unsupported_events(self):
         self.assertEqual(particle_class_from_pdgs([13, 2212]), UNKNOWN_PARTICLE_CLASS)
+        self.assertEqual(particle_class_from_pdgs([13, 22]), UNKNOWN_PARTICLE_CLASS)
+        self.assertEqual(particle_class_from_pdgs([211]), UNKNOWN_PARTICLE_CLASS)
         self.assertEqual(particle_class_from_pdgs([]), UNKNOWN_PARTICLE_CLASS)
 
 

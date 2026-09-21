@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
+#include <cmath>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -89,16 +90,19 @@ PrimaryGeneratorAction::PrimaryGeneratorAction(RunAction* runAction)
         sourceMode_ = mode;
     }
 
+    // Store angular configuration in Geant4 internal units.
+    sampleMaxTheta_ = 30.0 * deg;
+
     ConfigureMessenger();
 
     // Do not initialize CRY here. Batch macros are executed after this
     // action is constructed, so eagerly initializing CRY makes gun-only
     // validation runs look like CRY runs. CRY is initialized lazily when
     // it is actually selected/used.
-    if (sourceMode_ != "cry" && sourceMode_ != "gun") {
+    if (sourceMode_ != "cry" && sourceMode_ != "gun" && sourceMode_ != "sample") {
         throw std::runtime_error(
             "Unknown WARPTRACK_SOURCE='" + sourceMode_ +
-            "'. Use 'cry' or 'gun'.");
+            "'. Use 'cry', 'gun', or 'sample'.");
     }
 }
 
@@ -113,7 +117,7 @@ void PrimaryGeneratorAction::ConfigureMessenger()
         this, "/warptrack/", "WarpTrack primary-source controls");
     primaryMessenger_->DeclareMethod(
         "source", &PrimaryGeneratorAction::SetSource,
-        "Primary source: cry or gun.");
+        "Primary source: cry, gun, or sample.");
 
     cryMessenger_ = std::make_unique<G4GenericMessenger>(
         this, "/warptrack/cry/", "WarpTrack CRY controls");
@@ -137,19 +141,47 @@ void PrimaryGeneratorAction::ConfigureMessenger()
     cryMessenger_->DeclareProperty("verbose", cryVerbose_, "Per-particle diagnostics (0/1).");
     cryMessenger_->DeclareMethod("apply", &PrimaryGeneratorAction::ApplyCRYConfiguration,
                                  "Rebuild CRY using the current settings.");
+
+    sampleMessenger_ = std::make_unique<G4GenericMessenger>(
+        this, "/warptrack/sample/", "Randomized single-primary ML sample controls");
+    sampleMessenger_->DeclareMethod("particle", &PrimaryGeneratorAction::SetSampleParticle,
+                                    "Particle name: mu-, mu+, proton, neutron, etc.");
+    sampleMessenger_->DeclarePropertyWithUnit("minEnergy", "MeV", sampleMinEnergy_,
+                                               "Minimum kinetic energy.");
+    sampleMessenger_->DeclarePropertyWithUnit("maxEnergy", "MeV", sampleMaxEnergy_,
+                                               "Maximum kinetic energy.");
+    sampleMessenger_->DeclarePropertyWithUnit("halfWidthX", "mm", sampleHalfWidthX_,
+                                               "Uniform source half-width in x.");
+    sampleMessenger_->DeclarePropertyWithUnit("halfWidthY", "mm", sampleHalfWidthY_,
+                                               "Uniform source half-width in y.");
+    sampleMessenger_->DeclarePropertyWithUnit("maxTheta", "deg", sampleMaxTheta_,
+                                               "Maximum zenith angle from vertically downward.");
+    sampleMessenger_->DeclareProperty("logEnergy", sampleLogEnergy_,
+                                      "Sample kinetic energy log-uniformly (1) or uniformly (0).");
 }
 
 
 void PrimaryGeneratorAction::SetSource(const G4String& source)
 {
-    if (source != "cry" && source != "gun") {
-        G4cout << "WarpTrack: source must be 'cry' or 'gun'." << G4endl;
+    if (source != "cry" && source != "gun" && source != "sample") {
+        G4cout << "WarpTrack: source must be 'cry', 'gun', or 'sample'." << G4endl;
         return;
     }
     sourceMode_ = source;
     if (sourceMode_ == "cry" && !cryGenerator_) {
         InitializeCRY();
     }
+}
+
+
+void PrimaryGeneratorAction::SetSampleParticle(const G4String& particle)
+{
+    auto* definition = G4ParticleTable::GetParticleTable()->FindParticle(particle);
+    if (!definition) {
+        G4cout << "WarpTrack: unknown sample particle '" << particle << "'." << G4endl;
+        return;
+    }
+    sampleParticle_ = particle;
 }
 
 
@@ -231,6 +263,9 @@ void PrimaryGeneratorAction::GeneratePrimaries(
     if (sourceMode_ == "gun") {
         GenerateGunEvent(event);
     }
+    else if (sourceMode_ == "sample") {
+        GenerateSampleEvent(event);
+    }
     else {
         GenerateCRYEvent(event);
     }
@@ -251,6 +286,74 @@ void PrimaryGeneratorAction::GenerateGunEvent(
         primary.time = gun_->GetParticleTime();
         primary.position = gun_->GetParticlePosition();
         primary.direction = gun_->GetParticleMomentumDirection().unit();
+        runAction_->WritePrimary(primary);
+    }
+
+    gun_->GeneratePrimaryVertex(event);
+}
+
+
+void PrimaryGeneratorAction::GenerateSampleEvent(G4Event* event)
+{
+    if (sampleMinEnergy_ <= 0.0 || sampleMaxEnergy_ < sampleMinEnergy_) {
+        throw std::runtime_error("Invalid /warptrack/sample energy range.");
+    }
+    if (sampleHalfWidthX_ < 0.0 || sampleHalfWidthY_ < 0.0 ||
+        sampleMaxTheta_ < 0.0 || sampleMaxTheta_ >= 90.0 * deg) {
+        throw std::runtime_error("Invalid /warptrack/sample geometry/angular range.");
+    }
+
+    auto* definition =
+        G4ParticleTable::GetParticleTable()->FindParticle(sampleParticle_);
+    if (!definition) {
+        throw std::runtime_error("Unknown /warptrack/sample particle.");
+    }
+
+    // Energy is log-uniform by default so a single run covers stopping,
+    // interacting, and through-going regimes without concentrating at the
+    // high-energy end of a broad interval.
+    G4double kineticEnergy = 0.0;
+    if (sampleLogEnergy_ != 0 && sampleMaxEnergy_ > sampleMinEnergy_) {
+        const double logMin = std::log(sampleMinEnergy_);
+        const double logMax = std::log(sampleMaxEnergy_);
+        kineticEnergy = std::exp(logMin + G4UniformRand() * (logMax - logMin));
+    } else {
+        kineticEnergy = sampleMinEnergy_ +
+            G4UniformRand() * (sampleMaxEnergy_ - sampleMinEnergy_);
+    }
+
+    const G4double x = (2.0 * G4UniformRand() - 1.0) * sampleHalfWidthX_;
+    const G4double y = (2.0 * G4UniformRand() - 1.0) * sampleHalfWidthY_;
+
+    // Sample a downward cosmic-ray-like angular distribution.  For an
+    // intensity proportional to cos(theta), the solid-angle PDF is
+    // proportional to cos(theta) sin(theta), so sin^2(theta) is uniform.
+    const double sinMax = std::sin(sampleMaxTheta_);
+    const double sinTheta = std::sqrt(G4UniformRand()) * sinMax;
+    const double theta = std::asin(sinTheta);
+    const double phi = 2.0 * CLHEP::pi * G4UniformRand();
+    const G4ThreeVector direction(
+        std::sin(theta) * std::cos(phi),
+        std::sin(theta) * std::sin(phi),
+        -std::cos(theta));
+
+    const G4ThreeVector position(x, y, generationZ_);
+
+    gun_->SetParticleDefinition(definition);
+    gun_->SetParticleEnergy(kineticEnergy);
+    gun_->SetParticlePosition(position);
+    gun_->SetParticleMomentumDirection(direction);
+    gun_->SetParticleTime(0.0);
+
+    if (runAction_) {
+        PrimaryRecord primary;
+        primary.eventID = event->GetEventID();
+        primary.primaryIndex = 0;
+        primary.pdg = definition->GetPDGEncoding();
+        primary.kineticEnergy = kineticEnergy;
+        primary.time = 0.0;
+        primary.position = position;
+        primary.direction = direction;
         runAction_->WritePrimary(primary);
     }
 
