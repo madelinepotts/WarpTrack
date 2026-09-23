@@ -67,7 +67,7 @@ def _average_precision(truth, score):
     return float(precision[y == 1].sum() / pos)
 
 
-def evaluate(model, loader, device):
+def evaluate(model, loader, device, stop_threshold=0.5):
     model.eval()
     cm = np.zeros((N_PARTICLE_CLASSES, N_PARTICLE_CLASSES), dtype=np.int64)
     stop_truth, stop_score = [], []
@@ -92,7 +92,7 @@ def evaluate(model, loader, device):
     macro_f1=float(np.mean([x[4] for x in per_class]))
 
     truth=np.asarray(stop_truth,dtype=bool); score=np.asarray(stop_score)
-    pred=score >= 0.5
+    pred=score >= stop_threshold
     tp=int(np.sum(pred & truth)); fp=int(np.sum(pred & ~truth)); fn=int(np.sum(~pred & truth)); tn=int(np.sum(~pred & ~truth))
     precision=tp/max(tp+fp,1); recall=tp/max(tp+fn,1); f1=2*precision*recall/max(precision+recall,1e-12)
     return {
@@ -103,6 +103,75 @@ def evaluate(model, loader, device):
         "tp":tp,"fp":fp,"fn":fn,"tn":tn,
     }
 
+
+
+def collect_stop_predictions(model, loader, device):
+    """Collect stopping truth and probabilities without selecting a threshold."""
+    model.eval()
+    truth, score = [], []
+    with torch.no_grad():
+        for b in loader:
+            edep=b["edep"].to(device)
+            time=b["time"].to(device)
+            hit=b["hit"].to(device)
+            stop=b["stopped"].to(device)
+            _,slogit=model(edep,time,hit)
+            truth.extend(stop.cpu().numpy().astype(np.int64).tolist())
+            score.extend(slogit.sigmoid().cpu().numpy().tolist())
+    return np.asarray(truth,dtype=np.int64), np.asarray(score,dtype=np.float64)
+
+
+def stopping_metrics_at_threshold(truth, score, threshold):
+    truth=np.asarray(truth,dtype=bool)
+    score=np.asarray(score,dtype=np.float64)
+    pred=score >= threshold
+    tp=int(np.sum(pred & truth)); fp=int(np.sum(pred & ~truth))
+    fn=int(np.sum(~pred & truth)); tn=int(np.sum(~pred & ~truth))
+    precision=tp/max(tp+fp,1); recall=tp/max(tp+fn,1)
+    f1=2*precision*recall/max(precision+recall,1e-12)
+    return {"threshold":float(threshold),"precision":precision,"recall":recall,
+            "f1":f1,"tp":tp,"fp":fp,"fn":fn,"tn":tn}
+
+
+def select_stop_threshold(truth, score):
+    """Select validation threshold maximizing F1; ties prefer precision then closeness to 0.5."""
+    truth=np.asarray(truth,dtype=np.int64)
+    score=np.asarray(score,dtype=np.float64)
+    if len(score) == 0:
+        return 0.5, stopping_metrics_at_threshold(truth,score,0.5)
+
+    order=np.argsort(-score,kind="stable")
+    s=score[order]; y=truth[order]
+    tp=np.cumsum(y); fp=np.cumsum(1-y); total_pos=int(y.sum())
+
+    boundary=np.r_[s[1:] != s[:-1], True]
+    idx=np.flatnonzero(boundary)
+    tp_i=tp[idx].astype(np.float64); fp_i=fp[idx].astype(np.float64)
+    fn_i=total_pos-tp_i
+    precision=tp_i/np.maximum(tp_i+fp_i,1.0)
+    recall=tp_i/np.maximum(tp_i+fn_i,1.0)
+    f1=2*precision*recall/np.maximum(precision+recall,1e-12)
+    thresholds=s[idx]
+
+    best_f1=np.max(f1)
+    candidates=np.flatnonzero(np.isclose(f1,best_f1,rtol=0.0,atol=1e-12))
+    best_precision=np.max(precision[candidates])
+    candidates=candidates[np.isclose(precision[candidates],best_precision,rtol=0.0,atol=1e-12)]
+    best_idx=candidates[np.argmin(np.abs(thresholds[candidates]-0.5))]
+    threshold=float(thresholds[best_idx])
+    return threshold, stopping_metrics_at_threshold(truth,score,threshold)
+
+
+def print_stopping_report(title, m):
+    print(f"\n{title}")
+    print(f"  threshold: {m['threshold']:.6f}")
+    print(f"  precision: {m['precision']:.4f}")
+    print(f"  recall:    {m['recall']:.4f}")
+    print(f"  F1:        {m['f1']:.4f}")
+    print("  confusion matrix (rows=true [non-stop, stop], columns=predicted [non-stop, stop]):")
+    print("             non-stop    stop")
+    print(f"  non-stop   {m['tn']:8d} {m['fp']:7d}")
+    print(f"  stop       {m['fn']:8d} {m['tp']:7d}")
 
 def validation_loss(model, loader, device, particle_loss, stop_loss):
     model.eval(); total=0.0; batches=0
@@ -158,8 +227,19 @@ def main():
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--seed", type=int, default=12345)
     ap.add_argument("--workers", type=int, default=0)
-    ap.add_argument("--output", default="warptrack_multitask.pt")
+    ap.add_argument("--run-name", default="sqrt_weights",
+                    help="Name used for the output directory under --runs-dir.")
+    ap.add_argument("--runs-dir", default="runs",
+                    help="Directory containing named training runs.")
+    ap.add_argument("--patience", type=int, default=5,
+                    help="Stop after this many epochs without validation-score improvement; 0 disables.")
+    ap.add_argument("--output", default=None,
+                    help="Optional checkpoint path override. By default uses runs/<run-name>/model.pt.")
     args=ap.parse_args(); seed_everything(args.seed)
+    run_dir=Path(args.runs_dir)/args.run_name
+    run_dir.mkdir(parents=True,exist_ok=True)
+    output_path=Path(args.output) if args.output else run_dir/"model.pt"
+    output_path.parent.mkdir(parents=True,exist_ok=True)
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"device: {device}")
 
@@ -179,9 +259,16 @@ def main():
         if bool(e["particle_class_valid"]) and 0 <= y < N_PARTICLE_CLASSES: class_count[y]+=1
         if bool(e["stopped_in_server"]): stop_pos+=1
         else: stop_neg+=1
-    class_weight=(class_count.sum()/class_count.clamp_min(1)); class_weight/=class_weight.mean()
+    # Softer than full inverse-frequency weighting. This still compensates
+    # minority classes without making a rare proton error overwhelmingly more
+    # expensive than a muon error.
+    class_weight=torch.rsqrt(class_count.clamp_min(1))
+    class_weight/=class_weight.mean()
     print("train particle counts:", class_count.to(torch.int64).tolist())
+    print("particle class weights (inverse-sqrt, mean=1):",
+          [round(float(x),4) for x in class_weight])
     print(f"train stop counts: positive={stop_pos} negative={stop_neg}")
+    print(f"run directory: {run_dir}")
 
     model=MultiTaskEventClassifier(ds.n_channels,N_PARTICLE_CLASSES).to(device)
     particle_loss=nn.CrossEntropyLoss(weight=class_weight.float().to(device))
@@ -189,6 +276,8 @@ def main():
     opt=torch.optim.AdamW(model.parameters(),lr=args.lr,weight_decay=1e-4)
 
     best=-1.0
+    best_epoch=0
+    epochs_without_improvement=0
     train_losses=[]; val_losses=[]
     for epoch in range(1,args.epochs+1):
         model.train(); total=0.0; batches=0
@@ -205,14 +294,62 @@ def main():
         print(f"epoch {epoch:02d} train_loss={train_loss:.4f} val_loss={val_loss:.4f} particle_acc={m['particle_acc']:.4f} macro_F1={m['particle_macro_f1']:.4f} stop_P={m['stop_precision']:.4f} stop_R={m['stop_recall']:.4f} stop_F1={m['stop_f1']:.4f}")
         if score > best:
             best=score
-            torch.save({"model_state":model.state_dict(),"n_channels":ds.n_channels,"particle_classes":["muon","electron","photon","proton"],"trigger":{"min_bars":4,"bar_threshold_MeV":0.5},"seed":args.seed},args.output)
+            best_epoch=epoch
+            epochs_without_improvement=0
+            torch.save({
+                "model_state":model.state_dict(),
+                "n_channels":ds.n_channels,
+                "particle_classes":["muon","electron","photon","proton"],
+                "trigger":{"min_bars":4,"bar_threshold_MeV":0.5},
+                "seed":args.seed,
+                "epoch":epoch,
+                "validation_score":score,
+                "particle_weighting":"inverse_sqrt_frequency",
+                "particle_class_counts":class_count.to(torch.int64).tolist(),
+                "particle_class_weights":class_weight.tolist(),
+                "stop_pos_weight":stop_neg/max(stop_pos,1),
+            },output_path)
+        else:
+            epochs_without_improvement+=1
 
-    checkpoint=torch.load(args.output,map_location=device); model.load_state_dict(checkpoint["model_state"])
-    m=evaluate(model,test_loader,device)
-    print_test_report(m)
-    curve_path=str(Path(args.output).with_suffix(".loss.png"))
+        if args.patience > 0 and epochs_without_improvement >= args.patience:
+            print(f"early stopping at epoch {epoch:02d}; best epoch={best_epoch:02d} "
+                  f"validation_score={best:.4f}")
+            break
+
+    checkpoint=torch.load(output_path,map_location=device)
+    model.load_state_dict(checkpoint["model_state"])
+
+    # Calibrate the stopping threshold on validation data only.
+    val_stop_truth,val_stop_score=collect_stop_predictions(model,val_loader,device)
+    stop_threshold,val_stop_selected=select_stop_threshold(val_stop_truth,val_stop_score)
+    val_stop_default=stopping_metrics_at_threshold(val_stop_truth,val_stop_score,0.5)
+
+    print("\nStopping threshold calibration (validation set only):")
+    print_stopping_report("Validation stopping metrics @ default threshold",val_stop_default)
+    print_stopping_report("Validation stopping metrics @ selected threshold",val_stop_selected)
+
+    # Freeze the validation-selected threshold before evaluating the test set.
+    test_default=evaluate(model,test_loader,device,stop_threshold=0.5)
+    test_selected=evaluate(model,test_loader,device,stop_threshold=stop_threshold)
+
+    print("\nTest report at the original 0.5 stopping threshold:")
+    print_test_report(test_default)
+    print("\nTest report at the validation-selected stopping threshold:")
+    print_test_report(test_selected)
+
+    checkpoint["stop_threshold"]=stop_threshold
+    checkpoint["stop_threshold_metric"]="validation_f1"
+    checkpoint["stop_threshold_validation_precision"]=val_stop_selected["precision"]
+    checkpoint["stop_threshold_validation_recall"]=val_stop_selected["recall"]
+    checkpoint["stop_threshold_validation_f1"]=val_stop_selected["f1"]
+    torch.save(checkpoint,output_path)
+
+    curve_path=run_dir/"loss.png"
     save_loss_curve(train_losses,val_losses,curve_path)
-    print(f"\nsaved checkpoint: {args.output}")
+    print(f"\nbest epoch: {checkpoint.get('epoch',best_epoch)}")
+    print(f"selected stopping threshold: {stop_threshold:.6f}")
+    print(f"saved checkpoint: {output_path}")
     print(f"saved loss curve: {curve_path}")
 
 if __name__ == "__main__": main()
