@@ -5,6 +5,7 @@
 # realistic cosmic-ray spectrum. Once track-end truth is validated, tune
 # the energy to place the endpoint in a specific inter-hodoscope region.
 
+/warptrack/output/file muon_stop.root
 /warptrack/source gun
 
 /gun/particle mu-

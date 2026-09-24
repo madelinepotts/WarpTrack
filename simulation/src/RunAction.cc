@@ -1,4 +1,5 @@
 #include "RunAction.hh"
+#include "OutputConfig.hh"
 
 #include "G4AnalysisManager.hh"
 #include "G4SystemOfUnits.hh"
@@ -12,7 +13,6 @@ constexpr int kTrackEnd = 2;
 RunAction::RunAction() {
   auto* a = G4AnalysisManager::Instance();
   a->SetDefaultFileType("root");
-  a->SetFileName("warptrack");
   a->SetVerboseLevel(0);
   a->SetNtupleMerging(true);
 
@@ -73,7 +73,11 @@ RunAction::RunAction() {
 }
 
 void RunAction::BeginOfRunAction(const G4Run*) {
-  G4AnalysisManager::Instance()->OpenFile();
+  auto* a = G4AnalysisManager::Instance();
+  // Read the filename here, not in the constructor. Macro commands are
+  // executed after Geant4 action initialization but before /run/beamOn.
+  a->SetFileName(OutputConfig::GetFileName());
+  a->OpenFile();
 }
 
 void RunAction::EndOfRunAction(const G4Run*) {

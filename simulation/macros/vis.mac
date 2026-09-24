@@ -1,3 +1,4 @@
+/warptrack/output/file vis.root
 /run/initialize
 /vis/open OGL
 /vis/drawVolume

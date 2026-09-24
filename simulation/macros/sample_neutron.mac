@@ -1,4 +1,5 @@
 # Balanced ML-development sample: single neutrons.
+/warptrack/output/file sample_neutron.root
 /warptrack/source sample
 /warptrack/sample/particle neutron
 /warptrack/sample/minEnergy 1 MeV

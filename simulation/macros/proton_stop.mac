@@ -7,6 +7,7 @@
 #
 # Current geometry contains air between hodoscopes, not server material.
 
+/warptrack/output/file proton_stop.root
 /warptrack/source gun
 
 /gun/particle proton

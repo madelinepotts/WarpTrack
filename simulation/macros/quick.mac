@@ -1,4 +1,5 @@
 # Quick non-visual CRY smoke test.
+/warptrack/output/file quick.root
 /warptrack/source cry
 /warptrack/cry/verbose 1
 /warptrack/cry/apply

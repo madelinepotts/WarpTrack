@@ -1,6 +1,7 @@
 #pragma once
 
 #include "G4VUserPrimaryGeneratorAction.hh"
+#include "G4ThreeVector.hh"
 #include "globals.hh"
 #include <memory>
 #include <string>
@@ -28,6 +29,8 @@ private:
     void ApplyCRYConfiguration();
     void SetSource(const G4String& source);
     void SetCRYDate(const G4String& date);
+    void SetCRYAcceptanceMode(const G4String& mode);
+    bool AcceptCRYPrimary(const G4ThreeVector& position, const G4ThreeVector& direction) const;
     void SetSampleParticle(const G4String& particle);
     std::string BuildCRYSetupText() const;
 
@@ -69,4 +72,5 @@ private:
     G4double yoffset_ = 0.0;
     G4double zoffset_ = 0.0;
     G4int cryVerbose_ = 1;
+    G4String cryAcceptanceMode_ = "all";
 };

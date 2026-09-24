@@ -1,5 +1,6 @@
 # Standard WarpTrack validation sample.
 # Produces warptrack.root without opening the visualizer.
+/warptrack/output/file validation.root
 /warptrack/source cry
 
 # CRY particle species

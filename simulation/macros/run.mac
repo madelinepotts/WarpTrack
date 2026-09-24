@@ -1,6 +1,7 @@
 # Default non-visual CRY batch run.
 # CRY defaults are configured in PrimaryGeneratorAction and can be overridden
 # here before /warptrack/cry/apply.
+/warptrack/output/file warptrack_physical_1m.root
 /warptrack/source cry
 /warptrack/cry/verbose 0
 /warptrack/cry/apply

@@ -1,0 +1,9 @@
+# 10k validation run for rack-conditioned CRY generation.
+# Safe: does not write warptrack_physical_1m.root.
+/warptrack/output/file warptrack_rack_test_10k.root
+/run/initialize
+/warptrack/source cry
+/warptrack/cry/verbose 0
+/warptrack/cry/acceptanceMode rack
+/warptrack/cry/apply
+/run/beamOn 10000

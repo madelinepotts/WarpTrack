@@ -3,6 +3,7 @@
 # Fires 100 MeV neutrons directly downward through the detector.
 # This isolates Geant4 neutron transport/scintillator response from CRY.
 
+/warptrack/output/file neutron_test.root
 /warptrack/source gun
 /run/initialize
 

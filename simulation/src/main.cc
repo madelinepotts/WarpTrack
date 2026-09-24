@@ -1,5 +1,6 @@
 #include "ActionInitialization.hh"
 #include "DetectorConstruction.hh"
+#include "OutputMessenger.hh"
 
 #include "FTFP_BERT.hh"
 #include "G4RunManagerFactory.hh"
@@ -30,6 +31,7 @@ int requestedThreads(int argc, char** argv) {
 }
 
 int main(int argc, char** argv) {
+  OutputMessenger outputMessenger;
 #ifdef G4MULTITHREADED
   auto* runManager = G4RunManagerFactory::CreateRunManager(G4RunManagerType::MT);
   auto* mt = dynamic_cast<G4MTRunManager*>(runManager);

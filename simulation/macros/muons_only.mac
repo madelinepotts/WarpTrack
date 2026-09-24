@@ -1,6 +1,7 @@
 # Diagnostic CRY sample that returns only muons.
 # This changes the sampled output population and should NOT be used as an
 # unbiased all-particle cosmic-ray training sample.
+/warptrack/output/file muons_only.root
 /warptrack/source cry
 /warptrack/cry/returnNeutrons 0
 /warptrack/cry/returnProtons 0

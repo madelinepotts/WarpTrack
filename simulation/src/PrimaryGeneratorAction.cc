@@ -1,6 +1,7 @@
 #include "PrimaryGeneratorAction.hh"
 
 #include "PrimaryRecord.hh"
+#include "DetectorGeometryGenerated.hh"
 #include "RunAction.hh"
 
 #include "CRYGenerator.h"
@@ -20,6 +21,8 @@
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
+#include <algorithm>
+#include <limits>
 #include <cmath>
 #include <sstream>
 #include <stdexcept>
@@ -68,6 +71,40 @@ std::string ReadTextFile(const std::string& path)
     }
 
     return buffer.str();
+}
+
+bool RayIntersectsBox(const G4ThreeVector& origin,
+                      const G4ThreeVector& direction,
+                      const G4ThreeVector& boxMin,
+                      const G4ThreeVector& boxMax)
+{
+    // Standard ray/AABB slab test.  t >= 0 restricts the test to the
+    // forward-going part of the generated primary trajectory.
+    G4double tMin = 0.0;
+    G4double tMax = std::numeric_limits<G4double>::infinity();
+
+    const G4double o[3] = {origin.x(), origin.y(), origin.z()};
+    const G4double d[3] = {direction.x(), direction.y(), direction.z()};
+    const G4double lo[3] = {boxMin.x(), boxMin.y(), boxMin.z()};
+    const G4double hi[3] = {boxMax.x(), boxMax.y(), boxMax.z()};
+
+    for (int axis = 0; axis < 3; ++axis) {
+        if (std::abs(d[axis]) < 1.0e-15) {
+            if (o[axis] < lo[axis] || o[axis] > hi[axis]) {
+                return false;
+            }
+            continue;
+        }
+
+        G4double t1 = (lo[axis] - o[axis]) / d[axis];
+        G4double t2 = (hi[axis] - o[axis]) / d[axis];
+        if (t1 > t2) std::swap(t1, t2);
+        tMin = std::max(tMin, t1);
+        tMax = std::min(tMax, t2);
+        if (tMax < tMin) return false;
+    }
+
+    return tMax >= 0.0;
 }
 
 } // namespace
@@ -139,6 +176,8 @@ void PrimaryGeneratorAction::ConfigureMessenger()
     cryMessenger_->DeclareProperty("yoffset", yoffset_, "y offset in metres.");
     cryMessenger_->DeclareProperty("zoffset", zoffset_, "z offset in metres.");
     cryMessenger_->DeclareProperty("verbose", cryVerbose_, "Per-particle diagnostics (0/1).");
+    cryMessenger_->DeclareMethod("acceptanceMode", &PrimaryGeneratorAction::SetCRYAcceptanceMode,
+                                 "CRY geometric acceptance: all, rack, or hodoscope.");
     cryMessenger_->DeclareMethod("apply", &PrimaryGeneratorAction::ApplyCRYConfiguration,
                                  "Rebuild CRY using the current settings.");
 
@@ -188,6 +227,52 @@ void PrimaryGeneratorAction::SetSampleParticle(const G4String& particle)
 void PrimaryGeneratorAction::SetCRYDate(const G4String& date)
 {
     date_ = date;
+}
+
+
+void PrimaryGeneratorAction::SetCRYAcceptanceMode(const G4String& mode)
+{
+    if (mode != "all" && mode != "rack" && mode != "hodoscope") {
+        G4cout << "WarpTrack: cry/acceptanceMode must be 'all', 'rack', or 'hodoscope'."
+               << G4endl;
+        return;
+    }
+    cryAcceptanceMode_ = mode;
+}
+
+
+bool PrimaryGeneratorAction::AcceptCRYPrimary(
+    const G4ThreeVector& position, const G4ThreeVector& direction) const
+{
+    using namespace WarpTrackGeometry;
+
+    if (cryAcceptanceMode_ == "all") return true;
+
+    const G4double halfWidth = 0.5 * widthMM * mm;
+    const G4double halfDepth = 0.5 * depthMM * mm;
+
+    if (cryAcceptanceMode_ == "rack") {
+        // Rack acceptance means the forward ray intersects the detector/rack
+        // footprint somewhere between z=0 and the CRY generation plane.
+        return RayIntersectsBox(
+            position, direction,
+            G4ThreeVector(-halfWidth, -halfDepth, 0.0),
+            G4ThreeVector( halfWidth,  halfDepth, generationZ_));
+    }
+
+    // Hodoscope acceptance is stricter: the forward ray must cross the
+    // nominal envelope of at least one configured hodoscope.
+    const G4double halfH = 0.5 * hodoscopeHeightMM * mm;
+    for (const auto& hodoscope : hodoscopes) {
+        const G4double centerZ = hodoscope.rackU * rackUnitMM * mm;
+        if (RayIntersectsBox(
+                position, direction,
+                G4ThreeVector(-halfWidth, -halfDepth, centerZ - halfH),
+                G4ThreeVector( halfWidth,  halfDepth, centerZ + halfH))) {
+            return true;
+        }
+    }
+    return false;
 }
 
 
@@ -253,6 +338,7 @@ void PrimaryGeneratorAction::InitializeCRY()
            << " subboxLength: " << subboxLength_ << " m" << G4endl
            << " particle range: " << nParticlesMin_ << ".." << nParticlesMax_ << G4endl
            << " Generation Z: " << generationZ_ / m << " m" << G4endl
+           << " acceptanceMode: " << cryAcceptanceMode_ << G4endl
            << "========================================" << G4endl;
 }
 
@@ -372,10 +458,67 @@ void PrimaryGeneratorAction::GenerateCRYEvent(
 
     std::vector<CRYParticle*> particles;
 
-    cryGenerator_->genEvent(&particles);
-
     auto* particleTable =
         G4ParticleTable::GetParticleTable();
+
+    // Filtered modes are enrichment modes: redraw whole CRY showers until
+    // at least one valid primary intersects the selected acceptance volume.
+    // "all" deliberately preserves the original CRY behavior.
+    std::size_t cryTrials = 0;
+
+    while (true) {
+        ++cryTrials;
+        cryGenerator_->genEvent(&particles);
+
+        if (cryAcceptanceMode_ == "all") {
+            break;
+        }
+
+        bool showerAccepted = false;
+
+        for (CRYParticle* cryParticle : particles) {
+            if (!cryParticle) {
+                continue;
+            }
+
+            G4ParticleDefinition* definition =
+                particleTable->FindParticle(cryParticle->PDGid());
+
+            if (!definition) {
+                continue;
+            }
+
+            G4ThreeVector direction(
+                cryParticle->u(),
+                cryParticle->v(),
+                cryParticle->w());
+
+            if (direction.mag2() == 0.0) {
+                continue;
+            }
+
+            direction = direction.unit();
+
+            const G4ThreeVector position(
+                cryParticle->x() * m,
+                cryParticle->y() * m,
+                generationZ_);
+
+            if (AcceptCRYPrimary(position, direction)) {
+                showerAccepted = true;
+                break;
+            }
+        }
+
+        if (showerAccepted) {
+            break;
+        }
+
+        for (CRYParticle* cryParticle : particles) {
+            delete cryParticle;
+        }
+        particles.clear();
+    }
 
     // ---------------------------------------------------------------------
     // Diagnostic header
@@ -389,6 +532,9 @@ void PrimaryGeneratorAction::GenerateCRYEvent(
         << G4endl
         << " Generated particles: "
         << particles.size()
+        << G4endl
+        << " CRY shower trials: "
+        << cryTrials
         << G4endl
         << "========================================"
         << G4endl;
@@ -542,6 +688,18 @@ void PrimaryGeneratorAction::GenerateCRYEvent(
         }
 
         direction = direction.unit();
+
+        // Geometric acceptance is applied only to CRY primaries.  It does
+        // not inspect Geant4 interactions or detector response, so it cannot
+        // leak simulation outcome information into generation.
+        if (!AcceptCRYPrimary(position, direction)) {
+            if (cryVerbose_) G4cout
+                << "     STATUS: REJECTED - outside "
+                << cryAcceptanceMode_ << " acceptance"
+                << G4endl << G4endl;
+            delete cryParticle;
+            continue;
+        }
 
         // -------------------------------------------------------------
         // Print values that will actually be supplied to Geant4.

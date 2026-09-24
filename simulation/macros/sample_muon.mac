@@ -1,6 +1,7 @@
 # Balanced ML-development sample: single muons.
 # The randomized source uses a cos(theta)-weighted downward angular distribution,
 # uniform x/y source positions, and log-uniform kinetic energy.
+/warptrack/output/file sample_muon.root
 /warptrack/source sample
 /warptrack/sample/particle mu-
 /warptrack/sample/minEnergy 30 MeV

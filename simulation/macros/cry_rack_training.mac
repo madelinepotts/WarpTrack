@@ -1,0 +1,9 @@
+# Acceptance-conditioned CRY sample for ML training/enrichment.
+# Do not use this sample for absolute cosmic-ray rate measurements.
+/warptrack/output/file warptrack_rack_training_1m.root
+/run/initialize
+/warptrack/source cry
+/warptrack/cry/verbose 0
+/warptrack/cry/acceptanceMode rack
+/warptrack/cry/apply
+/run/beamOn 1000000
