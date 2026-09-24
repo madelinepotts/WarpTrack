@@ -1,0 +1,21 @@
+WarpTrack held-out test error analysis
+checkpoint: runs\sqrt_weights_calibrated\model.pt
+root: simulation\warptrack.root
+seed: 12345
+test events: 5396
+valid particle events: 5211
+particle correct: 4479
+particle incorrect: 732
+particle accuracy: 0.859528
+stop threshold: 0.780954
+stop TP: 209
+stop FP: 199
+stop FN: 150
+stop TN: 4838
+
+Particle confusion rows=true columns=predicted
+               muon  electron    photon    proton
+muon           4042       149        84        19
+electron        262       205        49         3
+photon           89        42       213         6
+proton           26         1         2        19

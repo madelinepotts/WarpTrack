@@ -1,0 +1,85 @@
+WarpTrack primary-multiplicity analysis — held-out test set
+checkpoint: runs\sqrt_weights_calibrated\model.pt
+root: simulation\warptrack.root
+seed: 12345
+stop threshold: 0.780954
+
+[all_test]
+events: 5396
+valid particle events: 5211
+particle accuracy: 0.859528
+particle macro-F1: 0.596431
+stop positives: 359
+stop TP/FP/FN/TN: 209/199/150/4838
+stop precision: 0.512255
+stop recall: 0.582173
+stop F1: 0.544980
+particle confusion rows=true columns=predicted
+               muon  electron    photon    proton
+muon           4042       149        84        19
+electron        262       205        49         3
+photon           89        42       213         6
+proton           26         1         2        19
+
+[single_primary]
+events: 5144
+valid particle events: 5141
+particle accuracy: 0.858977
+particle macro-F1: 0.595840
+stop positives: 334
+stop TP/FP/FN/TN: 193/184/141/4626
+stop precision: 0.511936
+stop recall: 0.577844
+stop F1: 0.542897
+particle confusion rows=true columns=predicted
+               muon  electron    photon    proton
+muon           3986       147        82        19
+electron        262       205        48         3
+photon           87        42       206         6
+proton           26         1         2        19
+
+[multi_primary]
+events: 252
+valid particle events: 70
+particle accuracy: 0.900000
+particle macro-F1: 0.421499
+stop positives: 25
+stop TP/FP/FN/TN: 16/15/9/212
+stop precision: 0.516129
+stop recall: 0.640000
+stop F1: 0.571429
+particle confusion rows=true columns=predicted
+               muon  electron    photon    proton
+muon             56         2         2         0
+electron          0         0         1         0
+photon            2         0         7         0
+proton            0         0         0         0
+
+[multi_same_family]
+events: 70
+valid particle events: 70
+particle accuracy: 0.900000
+particle macro-F1: 0.421499
+stop positives: 6
+stop TP/FP/FN/TN: 4/5/2/59
+stop precision: 0.444444
+stop recall: 0.666667
+stop F1: 0.533333
+particle confusion rows=true columns=predicted
+               muon  electron    photon    proton
+muon             56         2         2         0
+electron          0         0         1         0
+photon            2         0         7         0
+proton            0         0         0         0
+
+[multi_mixed_family]
+events: 182
+valid particle events: 0
+particle accuracy: nan
+particle macro-F1: nan
+stop positives: 19
+stop TP/FP/FN/TN: 12/10/7/153
+stop precision: 0.545455
+stop recall: 0.631579
+stop F1: 0.585366
+
